@@ -9,8 +9,8 @@ import asks
 import json
 import datetime
 
-from db2aku.resp import Resp
-from db2aku.buffered import BufferedReader
+from feed_akumuli.resp import Resp, parse_timestamp
+from feed_akumuli.buffered import BufferedReader
 
 async def reader(s, task_status=None):
 	task_status.started()
@@ -22,19 +22,14 @@ special = {}
 
 url="http://127.0.0.1:8181/api/query"
 
-def parse_timestamp(ts):
-    """Parse ISO formatted timestamp"""
-    try:
-        return datetime.datetime.strptime(ts.rstrip('0').rstrip('.')+" +0000", "%Y%m%dT%H%M%S.%f %z")
-    except ValueError:
-        return datetime.datetime.strptime(ts.rstrip('0').rstrip('.')+" +0000", "%Y%m%dT%H%M%S %z")
 
 async def main():
 	q = asks.Session(connections=3)
 	cl = trio.CapacityLimiter(5)
 	cff = open('cfg.yaml','r+')
 	cfg = yaml.safe_load(cff)
-	db_ = DB.connect(**cfg['db'], cursorclass=trio_mysql.cursors.SSDictCursor, init_command="set time_zone='+00:00';")
+	db_ = DB.connect(**cfg['mysql'], cursorclass=trio_mysql.cursors.SSDictCursor, init_command="set time_zone='+00:00';")
+
 	async with trio.open_nursery() as N:
 		async with db_ as db:
 			async with await trio.open_tcp_stream("localhost",8282) as s:

@@ -4,6 +4,7 @@
 from .buffered import BufferedReader
 import trio
 from trio.abc import AsyncResource
+import datetime
 
 EOL=b'\r\n'
 
@@ -23,6 +24,13 @@ class RespError(RuntimeError):
 class RespUnknownError(RespError):
     """Received an unknown line"""
     pass
+
+def parse_timestamp(ts):
+    """Parse ISO formatted timestamp"""
+    try:
+        return datetime.datetime.strptime(ts.rstrip('0').rstrip('.')+" +0000", "%Y%m%dT%H%M%S.%f %z")
+    except ValueError:
+        return datetime.datetime.strptime(ts.rstrip('0').rstrip('.')+" +0000", "%Y%m%dT%H%M%S %z")
 
 def _resp_encode(buf, data):
     if isinstance(data, str) and '\r' not in data and '\n' not in data:
