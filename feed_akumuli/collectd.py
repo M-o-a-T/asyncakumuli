@@ -1,22 +1,28 @@
-#! /usr/bin/env python
+#!/usr/bin/python3
 # -*- coding: utf-8 -*-
 # vim: fileencoding=utf-8
 #
 # Copyright © 2009 Adrian Perez <aperez@igalia.com>
+# Copyright © 2019 Matthias Urlichs <matthias@urlichs.de>
 #
 # Distributed under terms of the GPLv2 license.
 
 """
-Collectd network protocol implementation.
+Collectd network protocol implementation,
+forwarding to akumuli.
 """
 
-import socket
+import trio 
+from trio import socket
 import struct
 
 try:
-    from cStringIO import StringIO
+    from io import StringIO
 except ImportError:
-    from StringIO import StringIO
+    try:
+        from cStringIO import StringIO
+    except ImportError:
+        from StringIO import StringIO
 
 from datetime import datetime
 from copy import deepcopy
@@ -42,6 +48,8 @@ TYPE_TYPE            = 0x0004
 TYPE_TYPE_INSTANCE   = 0x0005
 TYPE_VALUES          = 0x0006
 TYPE_INTERVAL        = 0x0007
+TYPE_TIME_HIRES      = 0x0008
+TYPE_INTERVAL_HIRES  = 0x0009
 
 # For notifications
 TYPE_MESSAGE         = 0x0100
@@ -83,10 +91,17 @@ def decode_network_values(ptype, plen, buf):
     return result
 
 
+HIRES_SCALE = 2**30
+
 def decode_network_number(ptype, plen, buf):
     """Decodes a number (64-bit unsigned) in collectd network format.
     """
     return number.unpack_from(buf, header.size)[0]
+
+def decode_network_number_hr(ptype, plen, buf):
+    """Decodes a number (64-bit unsigned, accurracy 2^-30) in collectd network format.
+    """
+    return number.unpack_from(buf, header.size)[0]/HIRES_SCALE
 
 
 def decode_network_string(msgtype, plen, buf):
@@ -99,7 +114,9 @@ def decode_network_string(msgtype, plen, buf):
 _decoders = {
     TYPE_VALUES         : decode_network_values,
     TYPE_TIME           : decode_network_number,
+    TYPE_TIME_HIRES     : decode_network_number_hr,
     TYPE_INTERVAL       : decode_network_number,
+    TYPE_INTERVAL_HIRES : decode_network_number_hr,
     TYPE_HOST           : decode_network_string,
     TYPE_PLUGIN         : decode_network_string,
     TYPE_PLUGIN_INSTANCE: decode_network_string,
@@ -128,9 +145,6 @@ def decode_network_packet(buf):
         off += plen
 
 
-
-
-
 class Data(object):
     time = 0
     host = None
@@ -142,9 +156,9 @@ class Data(object):
     def __init__(self, **kw):
         [setattr(self, k, v) for k, v in kw.iteritems()]
 
-    @property
-    def datetime(self):
-        return datetime.fromtimestamp(self.time)
+#   @property
+#   def datetime(self):
+#       return datetime.fromtimestamp(self.time)
 
     @property
     def source(self):
@@ -213,9 +227,9 @@ def interpret_opcodes(iterable):
     nt = Notification()
 
     for kind, data in iterable:
-        if kind == TYPE_TIME:
+        if kind in {TYPE_TIME, TYPE_TIME_HIRES}:
             vl.time = nt.time = data
-        elif kind == TYPE_INTERVAL:
+        elif kind in {TYPE_INTERVAL, TYPE_INTERVAL_HIRES}:
             vl.interval = data
         elif kind == TYPE_HOST:
             vl.host = nt.host = data
@@ -248,7 +262,7 @@ class Reader(object):
     host = None
     port = DEFAULT_PORT
 
-    BUFFER_SIZE = 1024
+    BUFFER_SIZE = 10240
 
 
     def __init__(self, host=None, port=DEFAULT_PORT, multicast=False):
@@ -258,9 +272,11 @@ class Reader(object):
 
         self.host, self.port = host, port
         self.ipv6 = ":" in self.host
+        self.multicast = multicast
 
-        family, socktype, proto, canonname, sockaddr = socket.getaddrinfo(
-                None if multicast else self.host, self.port,
+    async def _init(self):
+        family, socktype, proto, canonname, sockaddr = await socket.getaddrinfo(
+                None if self.multicast else self.host, self.port,
                 socket.AF_INET6 if self.ipv6 else socket.AF_UNSPEC,
                 socket.SOCK_DGRAM, 0, socket.AI_PASSIVE)[0]
 
@@ -268,7 +284,7 @@ class Reader(object):
         self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._sock.bind(sockaddr)
 
-        if multicast:
+        if self.multicast:
             if hasattr(socket, "SO_REUSEPORT"):
                 self._sock.setsockopt(
                         socket.SOL_SOCKET,
@@ -292,17 +308,17 @@ class Reader(object):
                     socket.IP_MULTICAST_LOOP, 0)
 
 
-    def receive(self):
+    async def receive(self):
         """Receives a single raw collect network packet.
         """
-        return self._sock.recv(self.BUFFER_SIZE)
+        return await self._sock.recv(self.BUFFER_SIZE)
 
 
-    def decode(self, buf=None):
+    async def decode(self, buf=None):
         """Decodes a given buffer or the next received packet.
         """
         if buf is None:
-            buf = self.receive()
+            buf = await self.receive()
         return decode_network_packet(buf)
 
 
