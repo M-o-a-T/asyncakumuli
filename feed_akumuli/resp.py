@@ -5,6 +5,7 @@ from .buffered import BufferedReader
 import trio
 from trio.abc import AsyncResource
 import datetime
+from contextlib import asynccontextmanager
 
 EOL=b'\r\n'
 
@@ -19,7 +20,8 @@ class NoCodeError(RuntimeError):
     
 class RespError(RuntimeError):
     """Received an error"""
-    pass
+    def __str__(self):
+        return "Akumuli: error: "+" ".join(str(x) for x in self.args)
 
 class RespUnknownError(RespError):
     """Received an unknown line"""
@@ -91,7 +93,7 @@ class Resp(AsyncResource):
             elif line[0] == ':':
                 return int(line[1:-len(EOL)])
             elif line[0] == '-':
-                raise RespError(line[1:-len(EOL)])
+                raise RespError(line[1:-len(EOL)], self.stream.read_buffer)
             elif line[0] == '*':
                 n = int(line[1:-len(EOL)])
                 res = [ self.read() for _ in range(n) ]
@@ -105,7 +107,7 @@ class Resp(AsyncResource):
             elif line[0] == b':'[0]:
                 return int(line[1:-len(EOL)])
             elif line[0] == b'-'[0]:
-                raise RespError(line[1:-len(EOL)].decode("utf-8"))
+                raise RespError(line[1:-len(EOL)].decode("utf-8"), self.stream.read_buffer)
             elif line[0] == b'*'[0]:
                 n = int(line[1:-len(EOL)])
                 res = [ self.read() for _ in range(n) ]
@@ -130,4 +132,19 @@ class Resp(AsyncResource):
         if r is None:
             raise StopAsyncIteration
         return r
+
+async def reader(s, task_status=None):             
+    with trio.CancelScope() as cs:
+        task_status.started(cs)
+        async for m in s:
+            raise RuntimeError(m)         
+
+@asynccontextmanager
+async def connect(nursery, host="127.0.0.1", port=8282):
+    async with await trio.open_tcp_stream(host, port) as s:
+        s = Resp(s)
+        cs = await nursery.start(reader, s)
+        yield s
+        await trio.sleep(0.3) # let's hope that's enough
+        cs.cancel()
 

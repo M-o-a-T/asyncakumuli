@@ -154,7 +154,7 @@ class Data(object):
     typeinstance = None
 
     def __init__(self, **kw):
-        [setattr(self, k, v) for k, v in kw.iteritems()]
+        [setattr(self, k, v) for k, v in kw.items()]
 
 #   @property
 #   def datetime(self):
@@ -181,6 +181,9 @@ class Data(object):
 
     def __str__(self):
         return "[%i] %s" % (self.time, self.source)
+
+    def __repr__(self):
+        return "<%s %s>" % (self.__class__.__name__, str(self))
 
 
 
