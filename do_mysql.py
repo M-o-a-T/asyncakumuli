@@ -76,7 +76,6 @@ async def main():
                                                     await s.write(series,tags,r['ts'], 0)
                                             sp[1] = r['ts']
                                         else:
-                                            import pdb;pdb.set_trace()
                                             ov = val
                                             if sp[1] is None:
                                                 val = None
