@@ -6,8 +6,12 @@ import trio
 from trio.abc import AsyncResource
 import datetime
 from contextlib import asynccontextmanager
+import json
+import math
 
 EOL=b'\r\n'
+
+_url="http://127.0.0.1:8181/api/query"
 
 class NoCodeError(RuntimeError):
     """Could not encode this"""
@@ -26,6 +30,29 @@ class RespError(RuntimeError):
 class RespUnknownError(RespError):
     """Received an unknown line"""
     pass
+
+async def get_min_ts(q, series, tags):
+    """
+    Read the timestamp of the last entry.
+    """
+    r = await q.post(_url, data=json.dumps(dict(aggregate={series:"last"},
+        where=tags)))
+    if r.raw:
+        br = Resp(BufferedReader(data=r.raw))
+        try:
+            tag = await br.receive()
+        except RespError as exc:
+            if exc.args[0] == "not found":
+                return -math.inf
+            raise
+        else:
+            if r.status_code != 200:
+                raise RespError(r.reason_phrase, r.raw)
+        time = parse_timestamp(await br.receive())
+        val = await br.receive()
+        return time.timestamp()
+    else:
+        return -math.inf
 
 def parse_timestamp(ts):
     """Parse ISO formatted timestamp"""
@@ -54,12 +81,32 @@ def _resp_encode(buf, data):
     else:
         raise NoCodeError(data)
 
+def tags2str(tags):
+    if isinstance(tags, dict):
+        tags = " ".join("%s=%s" % (k,v) for k,v in sorted(tags.items()))
+    return tags
+
 class Resp(AsyncResource):
     def __init__(self, stream):
         if not isinstance(stream, BufferedReader):
             stream = BufferedReader(stream)
         self.stream = stream
         self.buf = []
+        self._dict = {}
+        self._dt = 0
+
+    def preload(self, series, tags):
+        self._dt += 1
+        tags = tags2str(tags)
+        self._dict.setdefault(series,{})[tags] = self._dt
+
+    async def flush_dict(self):
+        di = []
+        for k,v in self._dict.items():
+            for kk,vv in v.items():
+                di.append("%s %s" % (k,kk))
+                di.append(vv)
+        await self.send(di)
 
     async def aclose(self):
         await self.flush()
@@ -77,6 +124,14 @@ class Resp(AsyncResource):
         self._resp_encode(data, join=join)
         if len(self.buf) > 1000:
             await self.flush()
+
+    async def write(self, series, tags, timestamp, value):
+        tags = tags2str(tags)
+        try:
+            dt = self._dict[series][tags]
+        except KeyError:
+            dt = "%s %s" % (series, tags)
+        await self.send([dt, int(timestamp*1000000000), value], join=True)
 
     async def flush(self):
         buf = b''.join(self.buf)

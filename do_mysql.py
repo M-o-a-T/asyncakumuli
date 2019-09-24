@@ -9,7 +9,7 @@ import asks
 import json
 import datetime
 
-from feed_akumuli.resp import Resp, parse_timestamp
+from feed_akumuli.resp import Resp, parse_timestamp, get_min_ts
 from feed_akumuli.buffered import BufferedReader
 
 async def reader(s, task_status=None):
@@ -19,9 +19,6 @@ async def reader(s, task_status=None):
 
 known = {}
 special = {}
-
-url="http://127.0.0.1:8181/api/query"
-
 
 async def main():
 	q = asks.Session(connections=3)
@@ -46,26 +43,16 @@ async def main():
 							special[r['id']] = [r['zero'], None]
 				di = []
 				for k,v in known.items():
-					di.append(" ".join(v))
-					di.append(k)
-				await s.send(di)
+					s.preload(k,v)
+				await s.flush_dict()
 
 				async def one(dt):
 					series,tags = known[dt]
 					async with cl:
-						r = await q.post(url, data=json.dumps(dict(aggregate={series:"last"},
-							where=dict(s.split("=") for s in tags.split(" ")))))
-						if r.raw:
-							br = Resp(BufferedReader(data=r.raw))
-							tag = await br.receive()
-							time = parse_timestamp(await br.receive())
-							val = await br.receive()
-							ts = time.timestamp()
-							t = time.strftime("%Y-%m-%d %H:%M:%S")
-						else:
-							ts=None
-							t=None
-						
+						ts = await get_min_ts(q, series, tags)
+						if ts < 0:
+							ts = t = None
+
 						sp = special.get(dt,None)
 						nn=0
 						n=0
@@ -81,20 +68,24 @@ async def main():
 								await c.execute("select id, timestamp as t, unix_timestamp(timestamp) as ts, value from data_log where data_type = %s %s order by timestamp limit 10000" % (dt,ats))
 								async for r in c:
 									val = r['value']
-									if sp and ts:
+									if sp:
 										if sp[0] > 0:
 											if sp[1] is not None:
 												lts = sp[0]+sp[1]
-												if lts < ts:
-													await s.send([dt, r['ts']*1000000000, 0], join=True)
+												if lts < r['ts']:
+													await s.write(series,tags,r['ts'], 0)
 											sp[1] = r['ts']
 										else:
+											import pdb;pdb.set_trace()
 											ov = val
-											if sp[1] is not None and val >= sp[1]:
+											if sp[1] is None:
+												val = None
+											elif val >= sp[1]:
 												val -= sp[1]
 											sp[1] = ov
 
-									await s.send([dt,r['ts']*1000000000,val], join=True)
+									if val is not None:
+										await s.write(series,tags,r['ts'],val)
 									n += 1
 									t = r['t']
 									ts = r['ts']
@@ -104,8 +95,12 @@ async def main():
 								break
 						print(dt,*known[dt],nn)
 
-				for k in known.keys():
-					await one(k)
+				if len(sys.argv) < 2:
+					for k in known.keys():
+						await one(k)
+				else:
+					for k in sys.argv[1:]:
+						await one(int(k))
 
 		N.cancel_scope.cancel()
 

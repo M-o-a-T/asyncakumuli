@@ -12,14 +12,14 @@ import sys
 import os
 import trio
 from feed_akumuli.buffered import BufferedReader
-from feed_akumuli.resp import Resp, connect as akumuli, RespError, parse_timestamp
+from feed_akumuli.resp import Resp, connect as akumuli, RespError, parse_timestamp, get_min_ts
 import math
 import asks
 import json
 import shlex
 import datetime
 from feed_akumuli.collectd import Data
-from feed_akumuli.rrd import set_series, get_min_ts
+from feed_akumuli.rrd import set_series
 from pprint import pprint
 from copy import deepcopy
 
@@ -142,7 +142,7 @@ async def read_all():
         tags = datum.tags
         flags = datum.flags
         async with cl2:
-            min_ts = await get_min_ts(q, datum)
+            min_ts = await get_min_ts(q, datum.series, datum.tags)
 
         s = await path.stat()
         if s.st_mtime+3600*24*7 < now:
