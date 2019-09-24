@@ -1,0 +1,5 @@
+mysql:
+  db: your_stats
+  host: localhost
+  user: moat_import
+  password: "change me!"
