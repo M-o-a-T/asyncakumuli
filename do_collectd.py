@@ -5,18 +5,23 @@ Read RRD files from collectd
 extract values
 write to akumuli.
 """
+from csv import writer
 from lxml.etree import fromstring as parse_xml
+from sys import argv, stdout
 import sys
 import os
 import trio
-from feed_akumuli.resp import connect as akumuli, get_min_ts
-from feed_akumuli.model import DS, Entry, EntryDelta
-from feed_akumuli.collectd import Value
 import math
 import asks
+import json
 import shlex
 import datetime
-from copy import deepcopy, copy
+from pprint import pprint
+from copy import deepcopy
+
+from feed_akumuli.collectd import Data, Reader
+from feed_akumuli.resp import Resp, connect as akumuli, RespError, parse_timestamp, get_min_ts
+from feed_akumuli.model import EntryDelta
 
 url="http://127.0.0.1:8181/api/query"
 now = datetime.datetime.now().timestamp()
@@ -25,6 +30,22 @@ async def read_all():
     """
     The main processor. Sub-functions do the actual work.
     """
+    deriv = {}
+    same = {}
+
+    delta = EntryDelta()
+
+    async with Reader.new(host="2001:780:107::15") as r:
+        async for pkt in r:
+            pkt.set_series()
+            if pkt.series is None:
+                continue
+            pkt = delta(pkt)
+            if pkt is None:
+                continue
+            print(pkt)
+    return
+
     async def read_rrd(remote,fn):
         """
         Dump a RRD fiel to XML and parse it.
@@ -39,11 +60,11 @@ async def read_all():
         # Moving the parser to a background task doesn't pseed things up
         return parse_xml(p.stdout)
 
-    async def push(path, min_ts, tree, datum):
+    async def push(path, min_ts, tree, datum, zero_skip=False):
         """
         Send this tree, starting with this timestamp, using this series+tags
         """
-        tags = " ".join("%s=%s" % (k,v) for k,v in sorted(datum.tags.items()))
+        tags = " ".join("%s=%s" % (k,v) for k,v in datum.tags.items())
         #print("GO",path,datum.series,tags)
 
         step = int(tree.find("step").text)
@@ -78,8 +99,7 @@ async def read_all():
             # nursery and akumuli connection
             nonlocal rr, off, pdp, num, skip, nc, s, ls
 
-            conn.preload(datum.series, datum.tags_str)
-            await conn.flush_dict()
+            await conn.send(["%s %s" % (datum.series,tags), 1])
 
             while rrs:
                 # the earlier records are at the end, so …
@@ -109,33 +129,26 @@ async def read_all():
                     if s >= stop:
                         break
                     v = float(v.find('v').text)
-                    # Ignore empty bits.
+                    # Ignore some empty bits.
                     if math.isnan(v):
+                        continue
+                    if v == 0 and zero_skip:
                         continue
                     if ls is None or ls+0.5 < s:
                         # protect against nonsense
                         ls=s
-                        datum.value = v
-                        datum.time = s
-                        e = delta(copy(datum))
-                        if e is not None:
-                            await conn.write(e)
-                            nc += 1
+                        await conn.send([1,int(s*1000000000),v], join=True)
+                        nc += 1
                     s += pdp
-            for v in delta.flush():
-                if not hasattr(v,'abs_value'):
-                    await conn.write(v)
         try:
             async with trio.open_nursery() as nn, \
                     akumuli(nn) as conn:
                 try:
-                    delta = EntryDelta()
                     await push_()
                 finally:
                     await conn.flush()
                     await trio.sleep(1) # wait for possible error
         except Exception as exc:
-            raise
             print(f"*** ERROR *** {path} {datum.series} {tags}")
             print(f"*** ERROR *** exc={exc} step={step} s={s} ls={ls} min={min_ts} pdp={pdp} num={num}")
         else:
@@ -166,7 +179,7 @@ async def read_all():
         datum.type = dn[0]
         datum.typeinstance = '-'.join(dn[1:]) if len(dn)>1 else None
 
-        datum.set_series()
+        set_series(datum)
         if datum.series is None:
             return
         async with cl0:
@@ -205,12 +218,12 @@ async def read_all():
 
     async with trio.open_nursery() as n:
         # This host has been renamed
-        await process_path("store.s.smurf.noris.de", trio.Path("/mnt/c1/store.intern.smurf.noris.de"), 1, Value(mode=DS.gauge))
+        await process_path("store.s.smurf.noris.de", trio.Path("/mnt/c1/store.intern.smurf.noris.de"), 1, Data())
 
     async with trio.open_nursery() as n:
         # Read from these subdirs, mounted from these hosts.
-        await process_path("store.s.smurf.noris.de", trio.Path("/mnt/c1"), 0, Value(mode=DS.gauge), skip="store.intern.smurf.noris.de")
-        await process_path("base.s.smurf.noris.de", trio.Path("/mnt/c2"), 0, Value(mode=DS.gauge))
+        await process_path("store.s.smurf.noris.de", trio.Path("/mnt/c1"), 0, Data(), skip="store.intern.smurf.noris.de")
+        await process_path("base.s.smurf.noris.de", trio.Path("/mnt/c2"), 0, Data())
 
 if __name__ == "__main__":
     trio.run(read_all)

@@ -2,12 +2,15 @@
 # Stream adapter for RESP
 
 from .buffered import BufferedReader
+from .model import Entry, EntryDelta, tags2str, str2tags
 import trio
 from trio.abc import AsyncResource
 import datetime
 from contextlib import asynccontextmanager
 import json
 import math
+import heapq
+import time
 
 EOL=b'\r\n'
 
@@ -42,7 +45,7 @@ async def get_min_ts(q, series, tags):
         try:
             tag = await br.receive()
         except RespError as exc:
-            if exc.args[0] == "not found":
+            if exc.args[0] == "not found" or exc.args[0] == "":
                 return -math.inf
             raise
         else:
@@ -81,23 +84,31 @@ def _resp_encode(buf, data):
     else:
         raise NoCodeError(data)
 
-def tags2str(tags):
-    if isinstance(tags, dict):
-        tags = " ".join("%s=%s" % (k,v) for k,v in sorted(tags.items()))
-    return tags
-
 class Resp(AsyncResource):
-    def __init__(self, stream):
+    """
+    This class implements Akumuli's RESP submission protocol.
+
+    If "delta" is True, uses an EntryDelta filter to skip runs of
+    consecutive values if appropriate.
+    """
+    def __init__(self, stream, delay=15, delta=False):
         if not isinstance(stream, BufferedReader):
             stream = BufferedReader(stream)
         self.stream = stream
         self.buf = []
         self._dict = {}
         self._dt = 0
+        self._heap = []
+        self._same = EntryDelta() if delta else lambda x:x
+        self._delay = delay
+        self._large: trio.Event = None
+        self._sender: trio.Event = None
+        self._done: trio.Event = None
 
     def preload(self, series, tags):
         self._dt += 1
-        tags = tags2str(tags)
+        if not isinstance(tags,str):
+            raise RuntimeError("want a string")
         self._dict.setdefault(series,{})[tags] = self._dt
 
     async def flush_dict(self):
@@ -121,17 +132,69 @@ class Resp(AsyncResource):
             _resp_encode(self.buf, data)
 
     async def send(self, data, join=False):
+        """Send these raw data"""
         self._resp_encode(data, join=join)
         if len(self.buf) > 1000:
             await self.flush()
 
-    async def write(self, series, tags, timestamp, value):
-        tags = tags2str(tags)
+    async def write(self, pkt:Entry):
+        """Send the contents of this packet"""
+        tags = pkt.tags_str
         try:
-            dt = self._dict[series][tags]
+            dt = self._dict[pkt.series][tags]
         except KeyError:
-            dt = "%s %s" % (series, tags)
-        await self.send([dt, int(timestamp*1000000000), value], join=True)
+            dt = "%s %s" % (pkt.series, tags)
+        await self.send([dt, int(pkt.time*1000000000), pkt.value], join=True)
+
+    async def put(self, pkt):
+        """Store this packet, for eventual sending.
+        WARNING: there is no flow control here.
+        """
+        heapq.heappush(self._heap, pkt)
+        if self._sender is not None:
+            self._sender.set()
+
+        if self._large is None and len(self._heap) > 100:
+            self._large = trio.Event()
+        if self._large is not None:
+            await self._large.wait()
+
+    async def next_to_send(self):
+        while True:
+            while self._heap:
+                if self._large is not None and len(self._heap) < 50:
+                    self._large.set()
+                    self._large = None
+
+                self._sender = None
+                if self._heap[0].time <= self._t-self._delay:
+                    return heapq.heappop(self._heap)
+                if self._done is not None:
+                    self._done.set()
+                    return
+                self._t = time.time()
+                if self._heap[0].time <= self._t-self._delay:
+                    return heapq.heappop(self._heap)
+                await trio.sleep(self._delay+self._heap[0].time-self._t)
+
+            if self._done is not None:
+                self._done.set()
+                return
+            if self._sender is None:
+                self._sender = trio.Event()
+            await self._sender.wait()
+
+    async def send_all(self, task_status):
+        self._t = time.time()
+        task_status.started()
+
+        while True:
+            e = await self.next_to_send()
+            if e is None:
+                return
+            e = self._same(e)
+            if e is not None:
+                await self.write(e)
 
     async def flush(self):
         buf = b''.join(self.buf)
@@ -195,11 +258,20 @@ async def reader(s, task_status=None):
             raise RuntimeError(m)         
 
 @asynccontextmanager
-async def connect(nursery, host="127.0.0.1", port=8282):
+async def connect(nursery, host="127.0.0.1", port=8282, **kw):
+    """A context manager for managing the Resp object"""
     async with await trio.open_tcp_stream(host, port) as s:
-        s = Resp(s)
+        s = Resp(s, **kw)
+        ss = await nursery.start(s.send_all)
         cs = await nursery.start(reader, s)
         yield s
-        await trio.sleep(0.3) # let's hope that's enough
+
+        s._done = trio.Event()
+        if s._sender is None:
+            s._sender = trio.Event()
+        s._sender.set()
+        await s._done.wait()
+
+        await trio.sleep(0.3) # let's hope that's enough to read errors
         cs.cancel()
 
