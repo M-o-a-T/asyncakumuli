@@ -45,12 +45,12 @@ class Entry:
 
     def __lt__(self, other):
         if self.time != other.time:
-            return self.time-other.time
+            return self.time < other.time
         if self.series != other.series:
-            return 1 if self.series > other.series else -1
+            return self.series < other.series
         if self.tags != other.tags:
-            return 1 if self.tags_str > other.tags_str else -1
-        return self.value - other.value
+            return self.tags_str < other.tags_str
+        return self.value < other.value
 
     def __eq__(self, other):
         if self.time != other.time:
