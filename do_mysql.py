@@ -25,7 +25,7 @@ async def main():
 
     async with trio.open_nursery() as N:
         async with db_ as db, \
-                connect(N, delta=True) as s:
+                connect(N, host="stats.w.smurf.noris.de", delta=True) as s:
             async with db.cursor() as c:
                 await c.execute("select * from data_type where series is NULL")
                 async for r in c:
