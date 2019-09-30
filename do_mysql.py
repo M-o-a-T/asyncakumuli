@@ -81,7 +81,6 @@ async def main():
                                 t = r['t']
                                 ts = r['ts']
                                 cfg['at'] = {'t':t,'ts':ts,'dt':dt}
-                        await s.flush()
                         if not n:
                             break
                     print(dt,*known[dt],nn)
