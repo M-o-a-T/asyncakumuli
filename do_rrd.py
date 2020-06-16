@@ -128,7 +128,7 @@ async def read_all():
                     await conn.write(v)
         try:
             async with trio.open_nursery() as nn, \
-                    akumuli(nn, host="10.107.0.21") as conn:
+                    akumuli(nn, host="stats.w.smurf.noris.de") as conn:
                 try:
                     delta = EntryDelta()
                     await push_()
