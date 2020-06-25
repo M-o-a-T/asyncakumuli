@@ -105,8 +105,6 @@ class BufferedReader(AbstractStreamModifier):
         
         This method returns the number of new bytes.
         If zero, EOF has been seen.
-        This method returns the number of new bytes.
-        If zero, EOF has been seen.
         """
         if self._lower_stream is None:
             return False
