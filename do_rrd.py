@@ -18,7 +18,7 @@ import shlex
 import datetime
 from copy import deepcopy, copy
 
-url="http://127.0.0.1:8181/api/query"
+url="http://r1.s.smurf.noris.de:8181/api/query"
 now = datetime.datetime.now().timestamp()
 
 async def read_all():
@@ -31,6 +31,7 @@ async def read_all():
         """
         if remote:
             # This is a hack
+            import pdb;pdb.set_trace()
             fn = "/var/lib/rrdcached/db/collectd/"+str(fn)[7:]
             # ssh is broken WRT quoting
             p = await trio.run_process(["ssh","-n",remote,"rrdtool","dump",shlex.quote(fn)], capture_stdout=True)
@@ -127,7 +128,7 @@ async def read_all():
                     await conn.write(v)
         try:
             async with trio.open_nursery() as nn, \
-                    akumuli(nn) as conn:
+                    akumuli(nn, host="stats.work.smurf.noris.de") as conn:
                 try:
                     delta = EntryDelta()
                     await push_()
@@ -166,8 +167,7 @@ async def read_all():
         datum.type = dn[0]
         datum.typeinstance = '-'.join(dn[1:]) if len(dn)>1 else None
 
-        datum.set_series()
-        if datum.series is None:
+        if not datum.set_series():
             return
         async with cl0:
             try:
@@ -205,12 +205,11 @@ async def read_all():
 
     async with trio.open_nursery() as n:
         # This host has been renamed
-        await process_path("store.s.smurf.noris.de", trio.Path("/mnt/c1/store.intern.smurf.noris.de"), 1, Value(mode=DS.gauge))
+        await process_path(None, trio.Path("/var/lib/rrdcached/db/collectd/store.intern.smurf.noris.de"), 1, Value(mode=DS.gauge))
 
     async with trio.open_nursery() as n:
         # Read from these subdirs, mounted from these hosts.
-        await process_path("store.s.smurf.noris.de", trio.Path("/mnt/c1"), 0, Value(mode=DS.gauge), skip="store.intern.smurf.noris.de")
-        await process_path("base.s.smurf.noris.de", trio.Path("/mnt/c2"), 0, Value(mode=DS.gauge))
+        await process_path(None, trio.Path("/var/lib/rrdcached/db/collectd/"), 0, Value(mode=DS.gauge), skip="store.intern.smurf.noris.de")
 
 if __name__ == "__main__":
     trio.run(read_all)

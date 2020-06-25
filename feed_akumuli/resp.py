@@ -14,7 +14,7 @@ import time
 
 EOL=b'\r\n'
 
-_url="http://127.0.0.1:8181/api/query"
+_url="http://stats.work.smurf.noris.de:8181/api/query"
 
 class NoCodeError(RuntimeError):
     """Could not encode this"""

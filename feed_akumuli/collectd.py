@@ -192,7 +192,10 @@ class Data(Entry):
 
 class Value(Data, Entry):
     def set_series(datum):
-        """convert a collectd/RRD data item to series+tags"""
+        """convert a collectd/RRD data item to series+tags.
+
+        Returns True if OK.
+        """
 
         #time = 0
         #host = None
@@ -419,12 +422,13 @@ class Value(Data, Entry):
             datum.series = 'cpu.irq'
             tags['sub'] = t_i
 
-        else:
-            return
+        if datum.series is None:
+            return False
 
         if datum.host == "store.intern.smurf.noris.de":
             datum.host = "store.s.smurf.noris.de"
         tags['host'] = datum.host
+        return True
 
 
 class Notification(Data):

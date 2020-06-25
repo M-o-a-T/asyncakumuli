@@ -37,8 +37,7 @@ async def read_all():
 
     async with Reader.new(host="2001:780:107::15") as r:
         async for pkt in r:
-            pkt.set_series()
-            if pkt.series is None:
+            if not pkt.set_series():
                 continue
             pkt = delta(pkt)
             if pkt is None:
@@ -179,8 +178,7 @@ async def read_all():
         datum.type = dn[0]
         datum.typeinstance = '-'.join(dn[1:]) if len(dn)>1 else None
 
-        set_series(datum)
-        if datum.series is None:
+        if not set_series(datum):
             return
         async with cl0:
             try:
