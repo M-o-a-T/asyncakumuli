@@ -19,9 +19,9 @@ import datetime
 from pprint import pprint
 from copy import deepcopy
 
-from feed_akumuli.collectd import Data, Reader
-from feed_akumuli.resp import Resp, connect as akumuli, RespError, parse_timestamp, get_min_ts
-from feed_akumuli.model import EntryDelta
+from asyncakumuli.collectd import Data, Reader
+from asyncakumuli.resp import Resp, connect as akumuli, RespError, parse_timestamp, get_min_ts
+from asyncakumuli.model import EntryDelta
 
 url="http://127.0.0.1:8181/api/query"
 now = datetime.datetime.now().timestamp()

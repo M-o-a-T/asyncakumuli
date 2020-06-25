@@ -9,9 +9,9 @@ from lxml.etree import fromstring as parse_xml
 import sys
 import os
 import trio
-from feed_akumuli.resp import connect as akumuli, get_min_ts
-from feed_akumuli.model import DS, Entry, EntryDelta
-from feed_akumuli.collectd import Value
+from asyncakumuli.resp import connect as akumuli, get_min_ts
+from asyncakumuli.model import DS, Entry, EntryDelta
+from asyncakumuli.collectd import Value
 import math
 import asks
 import shlex

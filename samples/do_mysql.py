@@ -10,9 +10,9 @@ import json
 import datetime
 from traceback import print_exc
 
-from feed_akumuli.resp import connect, parse_timestamp, get_min_ts
-from feed_akumuli.buffered import BufferedReader
-from feed_akumuli.model import Entry, DS, str2tags, tags2str
+from asyncakumuli.resp import connect, parse_timestamp, get_min_ts
+from asyncakumuli.buffered import BufferedReader
+from asyncakumuli.model import Entry, DS, str2tags, tags2str
 
 known = {}
 special = {}
