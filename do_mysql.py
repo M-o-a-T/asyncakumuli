@@ -38,7 +38,7 @@ async def main():
                         special[r['id']] = [r['zero'], None]
             di = []
             async def one(dt):
-                async with connect(N, host="stats.w.smurf.noris.de", delta=True) as s:
+                async with connect(N, host="stats.work.smurf.noris.de", delta=True) as s:
                     for v in known.values():
                         s.preload(v[0], tags2str(v[1]))
                     await s.flush_dict()
