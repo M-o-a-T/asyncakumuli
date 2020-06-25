@@ -8,6 +8,7 @@ import sys
 import asks
 import json
 import datetime
+from traceback import print_exc
 
 from feed_akumuli.resp import connect, parse_timestamp, get_min_ts
 from feed_akumuli.buffered import BufferedReader
