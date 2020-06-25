@@ -264,14 +264,18 @@ async def connect(nursery, host="127.0.0.1", port=8282, **kw):
         s = Resp(s, **kw)
         ss = await nursery.start(s.send_all)
         cs = await nursery.start(reader, s)
-        yield s
+        try:
+            yield s
 
-        s._done = trio.Event()
-        if s._sender is None:
-            s._sender = trio.Event()
-        s._sender.set()
-        await s._done.wait()
+        finally:
+            with trio.move_on_after(5) as sc:
+                s.shield = True
+                s._done = trio.Event()
+                if s._sender is None:
+                    s._sender = trio.Event()
+                s._sender.set()
+                await s._done.wait()
 
-        await trio.sleep(0.3) # let's hope that's enough to read errors
-        cs.cancel()
+                await trio.sleep(0.3) # let's hope that's enough to read errors
+                cs.cancel()
 
