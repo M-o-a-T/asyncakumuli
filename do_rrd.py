@@ -167,8 +167,7 @@ async def read_all():
         datum.type = dn[0]
         datum.typeinstance = '-'.join(dn[1:]) if len(dn)>1 else None
 
-        datum.set_series()
-        if datum.series is None:
+        if not datum.set_series():
             return
         async with cl0:
             try:
