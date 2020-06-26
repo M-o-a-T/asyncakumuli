@@ -38,6 +38,10 @@ class Entry:
     def tags(self):
         return self._tags
 
+    @property
+    def ns_time(self):
+        return int(self.time.timestamp())*1000000000 + self.time.microsecond*1000;
+
     @tags.setter
     def tags(self, tags):
         if tags is None:

@@ -11,6 +11,7 @@ import json
 import math
 import heapq
 import time
+from typing import Union, Iterable, List, Mapping
 
 EOL=b'\r\n'
 
@@ -33,6 +34,10 @@ class RespError(RuntimeError):
 class RespUnknownError(RespError):
     """Received an unknown line"""
     pass
+
+RespType = Union[str,int,float,Iterable['RespType']]
+RespTags = Mapping[str,str]
+ExtRespType = Union[BaseException,str,int,float,Iterable[RespType]]
 
 async def get_min_ts(asks_session, series:str, tags:dict):
     """
@@ -64,7 +69,12 @@ def parse_timestamp(ts):
     except ValueError:
         return datetime.datetime.strptime(ts.rstrip('0').rstrip('.')+" +0000", "%Y%m%dT%H%M%S %z")
 
-def _resp_encode(buf, data):
+def resp_encode(buf:List[bytes], data:ExtRespType):
+    """
+    Encode a message to ReSP.
+
+    The message data is appended to the buffer list.
+    """
     if isinstance(data, str) and '\r' not in data and '\n' not in data:
         buf.append(b'+'+str(data).encode("utf-8")+EOL)
     elif isinstance(data, int):
@@ -76,7 +86,7 @@ def _resp_encode(buf, data):
     elif isinstance(data, (list,tuple)):
         buf.append(b'*'+str(len(data)).encode("ascii")+EOL)
         for d in data:
-            _resp_encode(buf, d)
+            resp_encode(buf, d)
     elif isinstance(data, bytes):
         buf.append('$'+str(len(data)).encode("ascii")+EOL) 
         buf.append(data)
@@ -84,14 +94,21 @@ def _resp_encode(buf, data):
     else:
         raise NoCodeError(data)
 
+
 class Resp(AsyncResource):
     """
     This class implements Akumuli's RESP submission protocol.
 
     If "delta" is True, uses an EntryDelta filter to skip runs of
     consecutive values if appropriate.
+
+    If "size" is set, queue submission is halted when more entries than
+    that are queued.
+
+    If "delay" is set, submission of entries is deferred until they're at
+    least this #seconds old.
     """
-    def __init__(self, stream, delay=15, delta=False):
+    def __init__(self, stream, delay=0, size=0, delta=False):
         if not isinstance(stream, BufferedReader):
             stream = BufferedReader(stream)
         self.stream = stream
@@ -101,17 +118,22 @@ class Resp(AsyncResource):
         self._heap = []
         self._same = EntryDelta() if delta else lambda x:x
         self._delay = delay
-        self._large: trio.Event = None
-        self._sender: trio.Event = None
-        self._done: trio.Event = None
+        self._heap_large: trio.Event = None  # waits for heap emptying
+        self._heap_item: trio.Event = None  # waits for heappush
+        self._done: trio.Event = None  # flush and shut down
+        self._heap_max = size # 100
 
-    def preload(self, series, tags):
+    def preload(self, series:str, tags:RespTags):
+        """
+        Preload this series+tags entry to Akumuli
+        """
         self._dt += 1
-        if not isinstance(tags,str):
-            raise RuntimeError("want a string")
-        self._dict.setdefault(series,{})[tags] = self._dt
+        self._dict.setdefault(series,{})[tags2str(tags)] = self._dt
 
     async def flush_dict(self):
+        """
+        Send the set of preload entries
+        """
         di = []
         for k,v in self._dict.items():
             for kk,vv in v.items():
@@ -123,17 +145,9 @@ class Resp(AsyncResource):
         await self.flush()
         await self.stream.aclose()
 
-    def _resp_encode(self, data, join=False):
-        if join:
-            assert isinstance(data,(tuple,list))
-            for d in data:
-                _resp_encode(self.buf, d)
-        else:
-            _resp_encode(self.buf, data)
-
-    async def send(self, data, join=False):
-        """Send these raw data"""
-        self._resp_encode(data, join=join)
+    async def send(self, data:ExtRespTypes):
+        """Send this message."""
+        resp_encode(self.buf, data)
         if len(self.buf) > 1000:
             await self.flush()
 
@@ -144,29 +158,36 @@ class Resp(AsyncResource):
             dt = self._dict[pkt.series][tags]
         except KeyError:
             dt = "%s %s" % (pkt.series, tags)
-        await self.send([dt, int(pkt.time*1000000000), pkt.value], join=True)
+
+        await self.send(dt)
+        await self.send(pkt.ns_time)
+        await self.send(pkt.value)
 
     async def put(self, pkt):
         """Store this packet, for eventual sending.
-        WARNING: there is no flow control here.
         """
         heapq.heappush(self._heap, pkt)
-        if self._sender is not None:
-            self._sender.set()
+        if self._heap_item is not None:
+            self._heap_item.set()
+            self._heap_item = None
 
-        if self._large is None and len(self._heap) > 100:
-            self._large = trio.Event()
-        if self._large is not None:
-            await self._large.wait()
+        if self._heap_max > 0:
+            if self._heap_large is None and len(self._heap) >= self._heap_max:
+                self._heap_large = trio.Event()
+            if self._heap_large is not None:
+                await self._heap_large.wait()
 
-    async def next_to_send(self):
+    async def _next_to_send(self):
+        """
+        Returns the next message on the heap
+        """
         while True:
             while self._heap:
-                if self._large is not None and len(self._heap) < 50:
-                    self._large.set()
-                    self._large = None
+                if self._heap_large is not None and len(self._heap) < self._heap_max/2:
+                    self._heap_large.set()
+                    self._heap_large = None
 
-                self._sender = None
+                self._heap_item = None
                 if self._heap[0].time <= self._t-self._delay:
                     return heapq.heappop(self._heap)
                 if self._done is not None:
@@ -180,16 +201,19 @@ class Resp(AsyncResource):
             if self._done is not None:
                 self._done.set()
                 return
-            if self._sender is None:
-                self._sender = trio.Event()
-            await self._sender.wait()
+            if self._heap_item is None:
+                self._heap_item = trio.Event()
+            await self._heap_item.wait()
 
     async def send_all(self, task_status):
+        """
+        Send loop.
+        """
         self._t = time.time()
         task_status.started()
 
         while True:
-            e = await self.next_to_send()
+            e = await self._next_to_send()
             if e is None:
                 return
             e = self._same(e)
@@ -197,11 +221,17 @@ class Resp(AsyncResource):
                 await self.write(e)
 
     async def flush(self):
+        """
+        Send our write-buffered data.
+        """
         buf = b''.join(self.buf)
         self.buf = []
         await self.stream.send_all(buf)
 
     async def receive(self):
+        """
+        Read a (possibly-complex) ReSP message.
+        """
         line = await self.stream.readuntil(EOL)
         if not line:
             return None
@@ -220,17 +250,19 @@ class Resp(AsyncResource):
             else:
                 raise RespUnknownError(line[:-len(EOL)])
         else:
-            if line[0] == b'+'[0]:
+            if line[0] == ord('+'):
                 return line[1:-len(EOL)].decode("utf-8")
-            elif line[0] == b':'[0]:
+            elif line[0] == ord(':'):
                 return int(line[1:-len(EOL)])
-            elif line[0] == b'-'[0]:
+            elif line[0] == ord('-'):
                 raise RespError(line[1:-len(EOL)].decode("utf-8"), self.stream.read_buffer)
-            elif line[0] == b'*'[0]:
+            elif line[0] == ord('*'):
                 n = int(line[1:-len(EOL)])
-                res = [ self.read() for _ in range(n) ]
+                res = []
+                for _ in range(n):
+                    res.append(await self.receive())
                 return res
-            elif line[0] == b'$'[0]:
+            elif line[0] == ord('$'):
                 lb = int(line[1:-len(EOL)])
                 b = self.stream.readexactly(lb)
                 eb = self.stream.readexactly(len(EOL))
@@ -271,9 +303,9 @@ async def connect(nursery, host="127.0.0.1", port=8282, **kw):
             with trio.move_on_after(5) as sc:
                 s.shield = True
                 s._done = trio.Event()
-                if s._sender is None:
-                    s._sender = trio.Event()
-                s._sender.set()
+                if s._heap_item is None:
+                    s._heap_item = trio.Event()
+                s._heap_item.set()
                 await s._done.wait()
 
                 await trio.sleep(0.3) # let's hope that's enough to read errors

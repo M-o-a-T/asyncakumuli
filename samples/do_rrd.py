@@ -79,7 +79,7 @@ async def read_all():
             # nursery and akumuli connection
             nonlocal rr, off, pdp, num, skip, nc, s, ls
 
-            conn.preload(datum.series, datum.tags_str)
+            conn.preload(datum.series, datum.tags)
             await conn.flush_dict()
 
             while rrs:

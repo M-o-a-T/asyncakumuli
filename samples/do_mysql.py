@@ -40,7 +40,7 @@ async def main():
             async def one(dt):
                 async with connect(N, host="stats.work.smurf.noris.de", delta=True) as s:
                     for v in known.values():
-                        s.preload(v[0], tags2str(v[1]))
+                        s.preload(v[0], v[1])
                     await s.flush_dict()
 
                     series,tags = known[dt]
