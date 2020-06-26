@@ -34,11 +34,11 @@ class RespUnknownError(RespError):
     """Received an unknown line"""
     pass
 
-async def get_min_ts(q, series, tags):
+async def get_min_ts(asks_session, series:str, tags:dict):
     """
     Read the timestamp of the last entry.
     """
-    r = await q.post(_url, data=json.dumps(dict(aggregate={series:"last"},
+    r = await asks_session.post(_url, data=json.dumps(dict(aggregate={series:"last"},
         where=tags)))
     if r.raw:
         br = Resp(BufferedReader(data=r.raw))

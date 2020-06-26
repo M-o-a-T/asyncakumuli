@@ -20,18 +20,19 @@ class DS(IntEnum):
     
 
 class Entry:
-    """A data entry. It consists of a series, and a number of tags."""
-    series: str = None
+    """A data entry. It consists of a series, a number of tags, a time, and
+    of course a value.
+    """
     _tags: Dict[str,str] = None
-    time: int = 0
     mode: DS = DS.invalid
 
-    def __init__(self, **kw):
-        for k,v in kw.items():
-            setattr(self, k, v)
-
-        if self._tags is None:
-            self._tags = {}
+    def __init__(self, value, time, series:str, tags:dict=None, mode=None):
+        self.value = value
+        self.time = time
+        self.series = series
+        self.tags = tags
+        if mode is not None:
+            self.mode = mode
 
     @property
     def tags(self):
@@ -39,8 +40,10 @@ class Entry:
 
     @tags.setter
     def tags(self, tags):
-        if isinstance(tags,str):
-            tags = _str2tags(tags)
+        if tags is None:
+            tags = {}
+        elif isinstance(tags,str):
+            tags = str2tags(tags)
         self._tags = tags
 
     def __lt__(self, other):
@@ -63,6 +66,7 @@ class Entry:
 
     @property
     def key(self):
+        """Key for hashing / """
         return (self.series,self.tags_str)
 
     @property
@@ -101,7 +105,8 @@ class EntryDelta:
     """
     This class accepts an entry which it may or may not return later.
 
-    All non-raw data in this are converted to gauges.
+    All non-raw data you feed to this are converted to gauges, i.e. rate
+    per second.
 
     Use::
         f = EntryDelta()
@@ -195,21 +200,4 @@ class EntryDelta:
         self._prev[k] = entry
         if entry.mode in {DS.counter,DS.derive,DS.absolute}:
             self._last = (entry.abs_value,entry.time)
-
-
-def _str2tags(tags):
-    t = {}
-    for kv in tags.split(' '):
-        if not kv:
-            continue
-        k,v = kv.split('=',1)
-        try:
-            v=int(v)
-        except ValueError:
-            try:
-                v=float(v)
-            except ValueError:
-                pass
-        t[k]=v
-    return t  
 

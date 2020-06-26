@@ -20,8 +20,7 @@ from pprint import pprint
 from copy import deepcopy
 
 from asyncakumuli.collectd import Data, Reader
-from asyncakumuli.resp import Resp, connect as akumuli, RespError, parse_timestamp, get_min_ts
-from asyncakumuli.model import EntryDelta
+from asyncakumuli import connect as akumuli, get_min_ts, EntryDelta
 
 url="http://127.0.0.1:8181/api/query"
 now = datetime.datetime.now().timestamp()

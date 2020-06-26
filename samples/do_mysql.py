@@ -10,7 +10,7 @@ import json
 import datetime
 from traceback import print_exc
 
-from asyncakumuli.resp import connect, parse_timestamp, get_min_ts
+from asyncakumuli import connect, get_min_ts
 from asyncakumuli.buffered import BufferedReader
 from asyncakumuli.model import Entry, DS, str2tags, tags2str
 
