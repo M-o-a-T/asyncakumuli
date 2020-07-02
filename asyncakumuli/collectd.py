@@ -12,21 +12,12 @@ Collectd network protocol implementation,
 forwarding to akumuli.
 """
 
-import trio 
+import trio
 from trio import socket
 import struct
 from contextlib import asynccontextmanager
 from enum import IntEnum
 
-try:
-    from io import StringIO
-except ImportError:
-    try:
-        from cStringIO import StringIO
-    except ImportError:
-        from StringIO import StringIO
-
-from datetime import datetime
 from copy import deepcopy
 import re
 
@@ -42,33 +33,32 @@ DEFAULT_IPv6_GROUP = "ff18::efc0:4a42"
 """Default IPv6 multicast group"""
 
 
-
 # Message kinds
 class TYPE(IntEnum):
-    HOST            = 0x0000
-    TIME            = 0x0001
-    PLUGIN          = 0x0002
+    HOST = 0x0000
+    TIME = 0x0001
+    PLUGIN = 0x0002
     PLUGIN_INSTANCE = 0x0003
-    TYPE            = 0x0004
-    TYPE_INSTANCE   = 0x0005
-    VALUES          = 0x0006
-    INTERVAL        = 0x0007
-    TIME_HIRES      = 0x0008
-    INTERVAL_HIRES  = 0x0009
+    TYPE = 0x0004
+    TYPE_INSTANCE = 0x0005
+    VALUES = 0x0006
+    INTERVAL = 0x0007
+    TIME_HIRES = 0x0008
+    INTERVAL_HIRES = 0x0009
 
-# For notifications
-    MESSAGE         = 0x0100
-    SEVERITY        = 0x0101
+    # For notifications
+    MESSAGE = 0x0100
+    SEVERITY = 0x0101
 
 
 header = struct.Struct("!2H")
 number = struct.Struct("!Q")
 number_s = struct.Struct("!q")
-short  = struct.Struct("!H")
+short = struct.Struct("!H")
 double = struct.Struct("<d")
 
 
-def decode_network_values(ptype, plen, buf):
+def decode_network_values(ptype, plen, buf):  # pylint: disable=unused-argument
     """Decodes a list of DS values in collectd network format
     """
     nvalues = short.unpack_from(buf, header.size)[0]
@@ -80,7 +70,7 @@ def decode_network_values(ptype, plen, buf):
     assert double.size == number.size
 
     result = []
-    for dstype in buf[header.size+short.size:off]:
+    for dstype in buf[header.size + short.size : off]:
         if dstype == DS.counter:
             result.append((dstype, number.unpack_from(buf, off)[0]))
         elif dstype == DS.gauge:
@@ -96,39 +86,41 @@ def decode_network_values(ptype, plen, buf):
     return result
 
 
-HIRES_SCALE = 2**30
+HIRES_SCALE = 2 ** 30
 
-def decode_network_number(ptype, plen, buf):
+
+def decode_network_number(ptype, plen, buf):  # pylint: disable=unused-argument
     """Decodes a number (64-bit unsigned) in collectd network format.
     """
     return number.unpack_from(buf, header.size)[0]
 
-def decode_network_number_hr(ptype, plen, buf):
+
+def decode_network_number_hr(ptype, plen, buf):  # pylint: disable=unused-argument
     """Decodes a number (64-bit unsigned, accurracy 2^-30) in collectd network format.
     """
-    return number.unpack_from(buf, header.size)[0]/HIRES_SCALE
+    return number.unpack_from(buf, header.size)[0] / HIRES_SCALE
 
 
-def decode_network_string(msgtype, plen, buf):
+def decode_network_string(msgtype, plen, buf):  # pylint: disable=unused-argument
     """Decodes a floating point number (64-bit) in collectd network format.
     """
-    return buf[header.size:plen-1].decode("utf-8")
+    return buf[header.size : plen - 1].decode("utf-8")
 
 
 # Mapping of message types to decoding functions.
 _decoders = {
-    TYPE.VALUES         : decode_network_values,
-    TYPE.TIME           : decode_network_number,
-    TYPE.TIME_HIRES     : decode_network_number_hr,
-    TYPE.INTERVAL       : decode_network_number,
-    TYPE.INTERVAL_HIRES : decode_network_number_hr,
-    TYPE.HOST           : decode_network_string,
-    TYPE.PLUGIN         : decode_network_string,
+    TYPE.VALUES: decode_network_values,
+    TYPE.TIME: decode_network_number,
+    TYPE.TIME_HIRES: decode_network_number_hr,
+    TYPE.INTERVAL: decode_network_number,
+    TYPE.INTERVAL_HIRES: decode_network_number_hr,
+    TYPE.HOST: decode_network_string,
+    TYPE.PLUGIN: decode_network_string,
     TYPE.PLUGIN_INSTANCE: decode_network_string,
-    TYPE.TYPE           : decode_network_string,
-    TYPE.TYPE_INSTANCE  : decode_network_string,
-    TYPE.MESSAGE        : decode_network_string,
-    TYPE.SEVERITY       : decode_network_number,
+    TYPE.TYPE: decode_network_string,
+    TYPE.TYPE_INSTANCE: decode_network_string,
+    TYPE.MESSAGE: decode_network_string,
+    TYPE.SEVERITY: decode_network_number,
 }
 
 
@@ -158,13 +150,14 @@ class Data(Entry):
     type = None
     typeinstance = None
 
-    def __init__(self, **kw):
+    def __init__(self, **kw):  # pylint: disable=super-init-not-called
+        # yes I know that super-init-not-called is dangerous
         for k, v in kw.items():
             setattr(self, k, v)
 
-#   @property
-#   def datetime(self):
-#       return datetime.fromtimestamp(self.time)
+    #   @property
+    #   def datetime(self):
+    #       return datetime.fromtimestamp(self.time)
 
     @property
     def source(self):
@@ -179,9 +172,9 @@ class Data(Entry):
             buf.append(self.type)
         if self.typeinstance:
             buf.append(self.typeinstance)
-        if hasattr(self,"value"):
-            buf.append("="+str(self.value))
-        return '/'.join(buf)
+        if hasattr(self, "value"):
+            buf.append("=" + str(self.value))
+        return "/".join(buf)
 
     def __str__(self):
         return "[%i] %s" % (self.time, self.source)
@@ -191,44 +184,45 @@ class Data(Entry):
 
 
 class Value(Data, Entry):
+    @staticmethod
     def set_series(datum):
         """convert a collectd/RRD data item to series+tags.
 
         Returns True if OK.
         """
 
-        #time = 0
-        #host = None
-        #plugin = None
-        #plugininstance = None
-        #type = None
-        #typeinstance = None
+        # time = 0
+        # host = None
+        # plugin = None
+        # plugininstance = None
+        # type = None
+        # typeinstance = None
 
-        #series
-        #tags
+        # series
+        # tags
 
         datum.series = None
         datum.tags = tags = {}
-        datum.flags = flags = {}
+        datum.flags = {}
 
         p = datum.plugin
         p_i = datum.plugininstance
         t = datum.type
         t_i = datum.typeinstance
 
-        hn = datum.host.split('.')
-        if hn[-3:] == ['smurf','noris','de']:
+        hn = datum.host.split(".")
+        if hn[-3:] == ["smurf", "noris", "de"]:
             del hn[-3:]
             hn.reverse()
             # s-r1 > r-a
-            if len(hn) == 2 and hn[1][0] == 'r' and hn[0] == 's':
-                hn[0] = 'r'
-                hn[1] = "abcd"[int(hn[1][1:])-1]
-            datum.host = '-'.join(hn)
+            if len(hn) == 2 and hn[1][0] == "r" and hn[0] == "s":
+                hn[0] = "r"
+                hn[1] = "abcd"[int(hn[1][1:]) - 1]
+            datum.host = "-".join(hn)
 
-        tags['typ'] = p
+        tags["typ"] = p
         if p_i is not None:
-            tags['elem'] = p_i
+            tags["elem"] = p_i
 
         if p == "disk":
             # Ignore partitions, MD arrays, CD-ROMs, loopbacks, and whatnot.
@@ -255,195 +249,195 @@ class Value(Data, Entry):
                 return
 
             datum.series = "disk.load"
-            t = t.split('_',1)
-            tags['sub'] = t[0] if t[0] == "pending" else t[1]
+            t = t.split("_", 1)
+            tags["sub"] = t[0] if t[0] == "pending" else t[1]
             if t_i is not None:
-                tags['dir'] = t_i
+                tags["dir"] = t_i
 
         elif p == "interface":
             if p_i.startswith("eth") or p_i.startswith("en"):
-                tags['medium'] = "wire"
+                tags["medium"] = "wire"
             elif p_i.startswith("wl"):
-                tags['medium'] = "air"
-            elif p_i in {"netz","kabel","uplink","wan","dummy0","vppp"}:
-                tags['medium'] = "dsl"
-            elif '_' in p_i:
-                d,m = p_i.split('_')
-                tags['dest'] = d
-                tags['medium'] = m
+                tags["medium"] = "air"
+            elif p_i in {"netz", "kabel", "uplink", "wan", "dummy0", "vppp"}:
+                tags["medium"] = "dsl"
+            elif "_" in p_i:
+                d, m = p_i.split("_")
+                tags["dest"] = d
+                tags["medium"] = m
             elif p_i == "infra":
-                tags['dest'] = "infra"
-                tags['medium'] = "wire"
+                tags["dest"] = "infra"
+                tags["medium"] = "wire"
             elif p_i == "wire":
-                tags['dest'] = "std"
-                tags['medium'] = "wire"
+                tags["dest"] = "std"
+                tags["medium"] = "wire"
             elif p_i == "draht":
-                tags['dest'] = "std"
-                tags['medium'] = "wire"
+                tags["dest"] = "std"
+                tags["medium"] = "wire"
             elif p_i == "funk":
-                tags['dest'] = "std"
-                tags['medium'] = "air"
-            elif p_i in {"wiresecure","vlan0042"}:
-                tags['dest'] = "secure"
-                tags['medium'] = "wire"
+                tags["dest"] = "std"
+                tags["medium"] = "air"
+            elif p_i in {"wiresecure", "vlan0042"}:
+                tags["dest"] = "secure"
+                tags["medium"] = "wire"
             elif p_i == "hanek":
-                tags['dest'] = "guest"
-                tags['medium'] = "hanek"
+                tags["dest"] = "guest"
+                tags["medium"] = "hanek"
             elif p_i == "wireguest":
-                tags['dest'] = "guest"
-                tags['medium'] = "wire"
+                tags["dest"] = "guest"
+                tags["medium"] = "wire"
             elif p_i == "guest":
-                tags['dest'] = "guest"
-                tags['medium'] = "air"
+                tags["dest"] = "guest"
+                tags["medium"] = "air"
             elif p_i == "lab":
-                tags['dest'] = "lab"
-                tags['medium'] = "wire"
+                tags["dest"] = "lab"
+                tags["medium"] = "wire"
             elif p_i == "init":
-                tags['dest'] = "init"
-                tags['medium'] = "wire"
+                tags["dest"] = "init"
+                tags["medium"] = "wire"
             elif p_i == "backup":
-                tags['dest'] = "backup"
-                tags['medium'] = "wire"
-            elif p_i in {"secure","lo","fups","erspan0"}:
+                tags["dest"] = "backup"
+                tags["medium"] = "wire"
+            elif p_i in {"secure", "lo", "fups", "erspan0"}:
                 return
-            elif p_i.startswith('bond'):
+            elif p_i.startswith("bond"):
                 return
-            elif p_i.startswith('gre'):
+            elif p_i.startswith("gre"):
                 return
-            elif p_i.startswith('rename'):
+            elif p_i.startswith("rename"):
                 return
-            elif p_i.startswith('router'):
+            elif p_i.startswith("router"):
                 return
             datum.series = "cpu.net"
-            if t.startswith('if_'):
+            if t.startswith("if_"):
                 t = t[3:]
-            tags['sub'] = t
+            tags["sub"] = t
             if t_i is not None:
-                tags['dir'] = t_i
+                tags["dir"] = t_i
 
         elif p == "thermal":
             datum.series = "temp"
-            tags['set'] = "cpu"
-            if '0' <= p_i[-2] <= '9':
-                tags['pos'] = p_i[-2:]
+            tags["set"] = "cpu"
+            if "0" <= p_i[-2] <= "9":
+                tags["pos"] = p_i[-2:]
             else:
-                tags['pos'] = p_i[-1]
+                tags["pos"] = p_i[-1]
 
         elif p == "df":
-            if p_i.startswith('tmp-'):
+            if p_i.startswith("tmp-"):
                 return
-            if '-tmp-' in p_i:
+            if "-tmp-" in p_i:
                 return
-            if p_i.startswith('mnt-'):
+            if p_i.startswith("mnt-"):
                 return
-            if p_i.startswith('media-'):
+            if p_i.startswith("media-"):
                 return
-            if ' ' in p_i:
+            if " " in p_i:
                 return
 
             if t_i == "reserved":
                 return
             datum.series = "disk.space"
-            dx = p_i.rsplit('-',1)
+            dx = p_i.rsplit("-", 1)
             if len(dx) > 1:
                 try:
                     int(dx[-1])
                 except ValueError:
                     pass
                 else:
-                    tags['elem'] = dx[0]+'-'
-                    tags['pos'] = dx[1]
+                    tags["elem"] = dx[0] + "-"
+                    tags["pos"] = dx[1]
             if t_i is not None:
-                tags['sub'] = t_i
+                tags["sub"] = t_i
 
         elif p == "mysql":
-            if t.startswith('mysql_'):
+            if t.startswith("mysql_"):
                 t = t[6:]
                 if t.startswith("sort_"):
                     t_i = t[5:]
                     t = "sort"
-            elif t.startswith('cache_'):
+            elif t.startswith("cache_"):
                 t = t[6:]
-            elif t.startswith('total_'):
+            elif t.startswith("total_"):
                 t = t[6:]
             if t_i is not None and t_i.startswith("qcache-"):
                 t_i = t_i[7:]
-            if t in {"mysql","cache"}:
-                tags['set'] = t
-                if '_' in t_i:
-                    t,t_i = t_i.split('_',1)
+            if t in {"mysql", "cache"}:
+                tags["set"] = t
+                if "_" in t_i:
+                    t, t_i = t_i.split("_", 1)
                 else:
-                    t,t_i = t_i,None
-            datum.series = "mysql."+t
+                    t, t_i = t_i, None
+            datum.series = "mysql." + t
             if t_i is not None:
-                tags['sub'] = t_i
+                tags["sub"] = t_i
 
         elif p == "chrony":
-            tt = t.split('_',1)
-            if tt[0] in {"clock","time","frequency"}:
-                datum.series = "clock."+tt[1]
+            tt = t.split("_", 1)
+            if tt[0] in {"clock", "time", "frequency"}:
+                datum.series = "clock." + tt[1]
             else:
-                datum.series = "clock."+t
+                datum.series = "clock." + t
 
             if t_i is None:
                 t_i = "system"
             elif t_i == "chrony":
                 t_i = "local"
-            tags['remote'] = t_i
+            tags["remote"] = t_i
 
         elif p == "memory":
             datum.series = "cpu.mem"
-            tags['sub'] = t_i
+            tags["sub"] = t_i
 
         elif p == "swap":
             datum.series = "cpu.swap.space"
             if t == "swap_io":
                 datum.series = "cpu.swap.io"
-            tags['sub'] = t_i
+            tags["sub"] = t_i
 
         elif p == "cpu":
             datum.series = "cpu.use"
-            tags['sub'] = t_i
+            tags["sub"] = t_i
 
         elif p == "load":
             datum.series = "cpu.load"
-            tags['sub'] = t
+            tags["sub"] = t
 
         elif p == "processes":
-            t = t.split('_')
+            t = t.split("_")
             if t[0] == "fork":
                 datum.series = "cpu.load"
-                tags['sub'] = "fork_rate"
+                tags["sub"] = "fork_rate"
             else:
                 datum.series = "cpu.proc"
-                tags['sub'] = t_i
+                tags["sub"] = t_i
 
         elif p == "irq":
-            datum.series = 'cpu.irq'
-            tags['sub'] = t_i
+            datum.series = "cpu.irq"
+            tags["sub"] = t_i
 
         if datum.series is None:
             return False
 
         if datum.host == "store.intern.smurf.noris.de":
             datum.host = "store.s.smurf.noris.de"
-        tags['host'] = datum.host
+        tags["host"] = datum.host
         return True
 
 
 class Notification(Data):
-    FAILURE  = 1
-    WARNING  = 2
-    OKAY     = 4
+    FAILURE = 1
+    WARNING = 2
+    OKAY = 4
 
     SEVERITY = {
         FAILURE: "FAILURE",
         WARNING: "WARNING",
-        OKAY   : "OKAY",
+        OKAY: "OKAY",
     }
 
     __severity = 0
-    message  = ""
+    message = ""
 
     def __set_severity(self, value):
         if value in (self.FAILURE, self.WARNING, self.OKAY):
@@ -457,28 +451,30 @@ class Notification(Data):
 
     def __str__(self):
         return "%s [%s] %s" % (
-                super(Notification, self).__str__(),
-                self.severitystring,
-                self.message)
+            super(Notification, self).__str__(),
+            self.severitystring,
+            self.message,
+        )
 
 
-
-
-class Reader(object):
+class Reader:
     """Network reader for collectd data.
 
     Listens on the network in a given address, which can be a multicast
     group address, and handles reading data when it arrives.
     """
+
     addr = None
     host = None
     port = DEFAULT_PORT
     _sock = None
+    _it = None
 
     BUFFER_SIZE = 10240
 
-
-    def __init__(self, host=None, db="/usr/share/collectd/types.db", port=DEFAULT_PORT, multicast=False):
+    def __init__(
+        self, host=None, db="/usr/share/collectd/types.db", port=DEFAULT_PORT, multicast=False
+    ):
         if host is None:
             multicast = True
             host = DEFAULT_IPv4_GROUP
@@ -490,7 +486,7 @@ class Reader(object):
 
     @classmethod
     def new(cls, *a, **k):
-        s = cls(*a,**k)
+        s = cls(*a, **k)
         return s._task()
 
     async def _read_db(self):
@@ -499,13 +495,13 @@ class Reader(object):
         split_pat = re.compile(r",\s*")
 
         async with await trio.Path(self.db).open("r") as p:
-            async for l in p:
+            async for line in p:
                 names = []
-                m = multi_pat.match(l)
+                m = multi_pat.match(line)
                 if m is None:
                     continue
                 for t in split_pat.split(m.group(2)):
-                    t = t.split(':',1)
+                    t = t.split(":", 1)
                     names.append(t[0])
                 db[m.group(1)] = names
         self.db = db
@@ -521,10 +517,16 @@ class Reader(object):
                 self._sock.close()
 
     async def _init(self):
-        family, socktype, proto, canonname, sockaddr = (await socket.getaddrinfo(
-                None if self.multicast else self.host, self.port,
+        family, socktype, proto, canonname, sockaddr = (
+            await socket.getaddrinfo(
+                None if self.multicast else self.host,
+                self.port,
                 socket.AF_INET6 if self.ipv6 else socket.AF_UNSPEC,
-                socket.SOCK_DGRAM, 0, socket.AI_PASSIVE))[0]
+                socket.SOCK_DGRAM,
+                0,
+                socket.AI_PASSIVE,
+            )
+        )[0]
 
         self._sock = socket.socket(family, socktype, proto)
         self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -532,33 +534,32 @@ class Reader(object):
 
         if self.multicast:
             if hasattr(socket, "SO_REUSEPORT"):
-                self._sock.setsockopt(
-                        socket.SOL_SOCKET,
-                        socket.SO_REUSEPORT, 1)
+                self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
 
             val = None
             if family == socket.AF_INET:
                 assert "." in self.host
-                val = struct.pack("4sl",
-                        socket.inet_aton(self.host), socket.INADDR_ANY)
+                val = struct.pack("4sl", socket.inet_aton(self.host), socket.INADDR_ANY)
             elif family == socket.AF_INET6:
                 raise NotImplementedError("IPv6 support not ready yet")
             else:
                 raise ValueError("Unsupported network address family")
 
             self._sock.setsockopt(
-                    socket.IPPROTO_IPV6 if self.ipv6 else socket.IPPROTO_IP,
-                    socket.IP_ADD_MEMBERSHIP, val)
+                socket.IPPROTO_IPV6 if self.ipv6 else socket.IPPROTO_IP,
+                socket.IP_ADD_MEMBERSHIP,
+                val,
+            )
             self._sock.setsockopt(
-                    socket.IPPROTO_IPV6 if self.ipv6 else socket.IPPROTO_IP,
-                    socket.IP_MULTICAST_LOOP, 0)
-
+                socket.IPPROTO_IPV6 if self.ipv6 else socket.IPPROTO_IP,
+                socket.IP_MULTICAST_LOOP,
+                0,
+            )
 
     async def receive(self):
         """Receives a single raw collect network packet.
         """
         return await self._sock.recv(self.BUFFER_SIZE)
-
 
     async def decode(self, buf=None):
         """Decodes a given buffer or the next received packet.
@@ -567,7 +568,7 @@ class Reader(object):
             buf = await self.receive()
         return decode_network_packet(buf)
 
-    def interpret_opcodes(self,iterable):
+    def interpret_opcodes(self, iterable):
         vl = Value()
         nt = Notification()
 
@@ -594,7 +595,7 @@ class Reader(object):
             elif kind == TYPE.VALUES:
                 if len(data) > 1:
                     instances = self.db[vl.type]
-                    for t,d in zip(instances,data):
+                    for t, d in zip(instances, data):
                         vl.typeinstance = t
                         vl.mode = d[0]
                         vl.value = d[1]
@@ -605,15 +606,14 @@ class Reader(object):
                     vl.value = data[0][1]
                     yield deepcopy(vl)
 
-
     async def interpret(self, iterable=None):
         """Interprets a sequence
         """
         if iterable is None:
             iterable = await self.decode()
-        if isinstance(iterable, basestring):
+        if isinstance(iterable, str):
             iterable = self.decode(iterable)
-        return interpret_opcodes(iterable)
+        return self.interpret_opcodes(iterable)
 
     def __aiter__(self):
         self._it = None
@@ -632,5 +632,3 @@ class Reader(object):
                 pass
             else:
                 return pkt
-
-

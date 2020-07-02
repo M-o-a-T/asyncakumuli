@@ -1,35 +1,43 @@
 from trio import abc
 
-_DEFAULT_LIMIT=4096
+_DEFAULT_LIMIT = 4096
+
 
 class IncompleteReadError(RuntimeError):
-    pass
-class LimitOverrunError(RuntimeError):
-    pass
+    def __init__(self, chunk):
+        super().__init__()
+        self.chunk = chunk
 
-class AbstractStreamModifier(abc.HalfCloseableStream):
+
+class LimitOverrunError(RuntimeError):
+    def __init__(self, txt, offset):
+        super().__init__(txt)
+        self.offset = offset
+
+
+class AbstractStreamModifier(abc.HalfCloseableStream):  # pylint: disable=abstract-method
     """Interpose on top of a stream.
 
     Use this class as a base for writing your own stream modifiers.
     """
-             
+
     def __init__(self, *, lower_stream=None):
         self._lower_stream = lower_stream
 
     # AsyncResource
-    
-    async def __aenter__(self):  
+
+    async def __aenter__(self):
         await self._lower_stream.__aenter__()
         return self
-                                        
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        return await self._lower_stream.__aexit__(exc_type, exc_val, exc_tb)
-            
-    async def aclose(self):                                                 
+
+    async def __aexit__(self, *err):
+        return await self._lower_stream.__aexit__(*err)
+
+    async def aclose(self):
         await self._lower_stream.aclose()
-                                 
+
     # SendStream
-            
+
     async def send_all(self, data):
         await self._lower_stream.send_all(data)
 
@@ -40,11 +48,13 @@ class AbstractStreamModifier(abc.HalfCloseableStream):
         return
 
 
-
 class BufferedReader(AbstractStreamModifier):
     """A stream modifier that buffers read data.
     """
-    def __init__(self, lower_stream=None, data=None, read_limit=_DEFAULT_LIMIT//2, write_limit=0):
+
+    def __init__(
+        self, lower_stream=None, data=None, read_limit=_DEFAULT_LIMIT // 2, write_limit=0
+    ):
         if (lower_stream is None) == (data is None):
             raise RuntimeError("provide either lower_stream or data")
         super().__init__(lower_stream=lower_stream)
@@ -55,7 +65,7 @@ class BufferedReader(AbstractStreamModifier):
             self._read_buffer = data
 
         if read_limit <= 0:
-            raise ValueError('Limit cannot be <= 0')
+            raise ValueError("Limit cannot be <= 0")
 
     @property
     def read_buffer(self):
@@ -71,12 +81,12 @@ class BufferedReader(AbstractStreamModifier):
 
     def __repr__(self):
         info = [self.__class__.__name__]
-        info.append(f'wraps={self._lower_stream}')
+        info.append(f"wraps={self._lower_stream}")
         if self._read_limit != _DEFAULT_LIMIT:
-            info.append(f'limit={self._read_limit}')
-        return '<{}>'.format(' '.join(info))
+            info.append(f"limit={self._read_limit}")
+        return "<{}>".format(" ".join(info))
 
-    async def receive_some(self, n=None):
+    async def receive_some(self, n=None):  # pylint: disable=arguments-differ
         """Get at most n bytes from the buffer.
 
         If the buffer is empty, fill it.
@@ -102,7 +112,7 @@ class BufferedReader(AbstractStreamModifier):
 
     async def extend_buffer(self):
         """Extends the buffer with more data.
-        
+
         This method returns the number of new bytes.
         If zero, EOF has been seen.
         """
@@ -127,22 +137,22 @@ class BufferedReader(AbstractStreamModifier):
         from internal buffer. Else, internal buffer will be cleared. Limit is
         compared against part of the line without newline.
         """
-        sep = b'\n'
+        sep = b"\n"
         seplen = len(sep)
         buf = self.read_buffer
         try:
             line = await self.readuntil(sep)
         except IncompleteReadError as e:
-            return e.partial
+            return e.chunk
         except LimitOverrunError as e:
-            if buf.startswith(sep, e.consumed):
-                del buf[:e.consumed + seplen]
+            if buf.startswith(sep, e.offset):
+                del buf[: e.offset + seplen]
             else:
                 buf.clear()
             raise ValueError(e.args[0])
         return line
 
-    async def readuntil(self, separator=b'\n'):
+    async def readuntil(self, separator=b"\n"):
         """Read data from the stream until ``separator`` is found.
 
         On success, the data and separator will be removed from the
@@ -165,7 +175,7 @@ class BufferedReader(AbstractStreamModifier):
         buf = self.read_buffer
         seplen = len(separator)
         if seplen == 0:
-            raise ValueError('Separator should be at least one-byte string')
+            raise ValueError("Separator should be at least one-byte string")
 
         # Consume whole buffer except last bytes, which length is
         # one less than seplen. Let's check corner cases with
@@ -209,8 +219,8 @@ class BufferedReader(AbstractStreamModifier):
                 offset = buflen + 1 - seplen
                 if offset > self._read_limit:
                     raise LimitOverrunError(
-                        'Separator is not found, and chunk exceed the limit',
-                        offset)
+                        "Separator is not found, and chunk exceed the limit", offset
+                    )
 
             # Complete message (with full separator) may be present in buffer
             # even when EOF flag is set. This may happen when the last chunk
@@ -221,22 +231,20 @@ class BufferedReader(AbstractStreamModifier):
                 try:
                     buf.clear()
                 except AttributeError:
-                    buf = b''
-                raise IncompleteReadError(chunk, None)
+                    buf = b""
+                raise IncompleteReadError(chunk)
 
             # _wait_for_data() will resume reading if stream was paused.
             eof = not await self.extend_buffer()
 
         if isep > self._read_limit:
-            raise LimitOverrunError(
-                'Separator is found, but chunk is longer than limit', isep)
+            raise LimitOverrunError("Separator is found, but chunk is longer than limit", isep)
 
-        chunk = buf[:isep + seplen]
+        chunk = buf[: isep + seplen]
         try:
-            del buf[:isep + seplen]
+            del buf[: isep + seplen]
         except TypeError:
-            self.read_buffer = buf[isep + seplen:]
+            self.read_buffer = buf[isep + seplen :]
             return chunk
         else:
             return bytes(chunk)
-

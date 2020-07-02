@@ -1,4 +1,3 @@
-
-from _impl import connect, get_min_ts
-from _impl import NoCodeError, RespError, RespUnknownError
-from .model import DS, Entry, EntryDelta
+from ._impl import connect, get_data, get_max_ts  # noqa: F401
+from ._impl import NoCodeError, RespError, RespUnknownError  # noqa: F401
+from .model import DS, Entry, EntryDelta  # noqa: F401
