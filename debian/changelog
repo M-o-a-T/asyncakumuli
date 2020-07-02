@@ -1,3 +1,9 @@
+asyncakumuli (0.2.0-2) unstable; urgency=medium
+
+  * Control update
+
+ -- Matthias Urlichs <matthias@urlichs.de>  Thu, 02 Jul 2020 18:37:06 +0200
+
 asyncakumuli (0.2.0-1) smurf; urgency=low
 
   * source package automatically created by stdeb 0.8.5

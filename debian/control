@@ -2,27 +2,24 @@ Source: asyncakumuli
 Maintainer: Matthias Urlichs <matthias@urlichs.de>
 Section: python
 Priority: optional
-Build-Depends: dh-python, python3-setuptools, python3-all, debhelper (>= 9)
+Build-Depends: dh-python, python3-setuptools, python3-all, debhelper (>= 13),
+  python3-pytest-trio,
 Standards-Version: 3.9.6
 Homepage: http://github.com/smurfix/asyncakumuli
 
 Package: python3-asyncakumuli
 Architecture: all
-Depends: ${misc:Depends}, ${python3:Depends}
-Description: Write data to Akumuli
- AsyncAkumuli
- ============
- .
- Welcome to `AsyncAkumuli <https://github.com/smurfix/asyncakumuli>`__!
- .
- This library contains a small async wrapper for submission of data to
- `Akumuli <https://akumuli.org>`__.
+Depends: ${misc:Depends}, ${python3:Depends},
+  python3-pytest,
+Recommends: akumuli
+Description: Write data to Akumuli (and read them)
+ This library contains a small async wrapper for submission of data to,
+  and retrieval from, Akumuli.
  .
  Also included:
  * a utility to read the last timestamp, as Akumuli doesn't go backwards
  * helper code to interpred RRD / collectd input so that you can feed those
    to Akumuli
  * a couple of example scripts
- .
- .
+ * tests, plus code that helps you test code building on Akumuli
 
