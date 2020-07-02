@@ -1,2 +1,9 @@
 /cfg.yaml
 __pycache__
+<<<<<<< master
+||||||| deb
+/.pybuild/
+=======
+/.pybuild/
+/asyncakumuli.egg-info/
+>>>>>>> local
