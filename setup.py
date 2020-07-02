@@ -13,7 +13,8 @@ setup(
     author_email="matthias@urlichs.de",
     license="GPLv3 or later",
     packages=find_packages(),
-    install_requires=["anyio >= 1.0", 'importlib-metadata ~= 1.0 ; python_version < "3.8"'],
+    tests_require=["pytest-trio"],
+    install_requires=["trio"],
     keywords=["iot", "logging"],
     python_requires=">=3.6",
     classifiers=[
