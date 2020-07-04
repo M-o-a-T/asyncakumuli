@@ -96,9 +96,9 @@ async def get_data(
     r = {"range": r}
     r = await asks_session.post(url, data=json.dumps(dict(select=series, where=tags, **r)))
 
-    if r.raw:
-        if r.status_code != 200:
-            raise RespError(r.reason_phrase, r.raw)
+    if r.status_code != 200:
+        raise RespError(r.reason_phrase, r.raw)
+    elif r.raw != b"":
         br = Resp(BufferedReader(data=r.raw))
         while True:
             tags = await br.receive()  # ignore value
@@ -112,7 +112,7 @@ async def get_data(
                 res = float(res)
             yield res, tm
     else:
-        raise RuntimeError("Huh?", r)
+        return  # empty response
 
 
 def parse_timestamp(ts):
