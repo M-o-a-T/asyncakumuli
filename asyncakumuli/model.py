@@ -1,8 +1,10 @@
 # data model
 
 from enum import IntEnum
-from typing import Dict
 from datetime import datetime
+from time import time_ns
+
+from typing import Dict
 
 __all__ = ["Entry", "DS"]
 
@@ -26,27 +28,33 @@ class Entry:
     _tags: Dict[str, str] = None
     mode: DS = DS.invalid
     interval = None
+    ns_time = None
 
-    def __init__(self, value, time, series: str, tags: dict = None, mode=None):
+    def __init__(self, value: int, series: str, tags: dict = None, time=None, mode: DS = None):
+        """
+        Time may be a datetime instance, a number of seconds, or nanoseconds
+        """
+        if time is None:
+            time = time_ns()
+        elif isinstance(time, datetime):
+            time = int(time.timestamp()) * 1000000000 + time.microsecond * 1000
+        elif time < 1000000000000:  # seconds
+            time = int(time * 1000000000)  # nanoseconds
+
         self.value = value
-        self.time = time
+        self.ns_time = time
         self.series = series
         self.tags = tags
         if mode is not None:
             self.mode = mode
 
     @property
-    def tags(self):
-        return self._tags
+    def time(self):
+        return self.ns_time / 1000000000
 
     @property
-    def ns_time(self):
-        t = self.time
-        if isinstance(t, datetime):
-            # way more accurate
-            return int(t.timestamp()) * 1000000000 + t.microsecond * 1000
-        else:
-            return int(t * 1000000000)
+    def tags(self):
+        return self._tags
 
     @tags.setter
     def tags(self, tags):
@@ -57,8 +65,8 @@ class Entry:
         self._tags = tags
 
     def __lt__(self, other):
-        if self.time != other.time:
-            return self.time < other.time
+        if self.ns_time != other.ns_time:
+            return self.ns_time < other.ns_time
         if self.series != other.series:
             return self.series < other.series
         if self.tags != other.tags:
@@ -66,7 +74,7 @@ class Entry:
         return self.value < other.value
 
     def __eq__(self, other):
-        if self.time != other.time:
+        if self.ns_time != other.ns_time:
             return False
         if self.series != other.series:
             return False
@@ -87,14 +95,14 @@ class Entry:
         return "<%s:%s:%s %s %s %s>" % (
             self.__class__.__name__,
             self.mode,
-            self.time,
+            self.ns_time,
             self.value,
             self.series,
             self.tags_str,
         )
 
     def __str__(self):
-        return "%s %s@%s %s %s" % (self.value, self.mode, self.time, self.series, self.tags_str)
+        return "%s %s@%s %s %s" % (self.value, self.mode, self.ns_time, self.series, self.tags_str)
 
 
 def str2tags(tags):
@@ -150,10 +158,10 @@ class EntryDelta:
             try:
                 ov, ot = self._last[k]
             except KeyError:
-                self._last[k] = (entry.value, entry.time)
+                self._last[k] = (entry.value, entry.ns_time)
                 return
             else:
-                t = entry.time
+                t = entry.ns_time
             if ot >= t:
                 return
             r = t - ot
@@ -205,7 +213,7 @@ class EntryDelta:
                 pass
             else:
                 v.abs_value = lv
-                v.time = lt
+                v.ns_time = lt
             yield v
         self._prev = {}
 
@@ -219,4 +227,4 @@ class EntryDelta:
         entry.__dup = False
         self._prev[k] = entry
         if entry.mode in {DS.counter, DS.derive, DS.absolute}:
-            self._last = (entry.abs_value, entry.time)
+            self._last = (entry.abs_value, entry.ns_time)
