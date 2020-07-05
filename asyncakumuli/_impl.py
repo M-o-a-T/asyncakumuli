@@ -95,8 +95,8 @@ async def get_data(
         if isinstance(t_end, (int, float)):
             t_end = datetime.fromtimestamp(t_end,tz=UTC)
         r["to"] = t_end.strftime("%Y%m%dT%H%M%S")
-    r = {"range": r}
-    r = await asks_session.post(url, data=json.dumps(dict(select=series, where=tags, **r)))
+    r = {"select":series, "where":tags, "range": r}
+    r = await asks_session.post(url, data=json.dumps(r))
 
     if r.status_code != 200:
         raise RespError(r.reason_phrase, r.raw)
