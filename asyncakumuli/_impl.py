@@ -1,6 +1,7 @@
 #
 # Stream adapter for RESP
 
+import re
 from .buffered import BufferedReader, IncompleteReadError
 from .model import Entry, EntryDelta, tags2str
 import trio
@@ -12,6 +13,7 @@ import heapq
 import time
 from typing import Union, Iterable, List, Mapping
 from datetime import datetime
+from pytz import UTC
 
 EOL = b"\r\n"
 
@@ -87,11 +89,11 @@ async def get_data(
     r = {}
     if t_start:
         if isinstance(t_start, (int, float)):
-            t_start = datetime.fromtimestamp(t_start)
+            t_start = datetime.fromtimestamp(t_start,tz=UTC)
         r["from"] = t_start.strftime("%Y%m%dT%H%M%S")
     if t_end:
         if isinstance(t_end, (int, float)):
-            t_end = datetime.fromtimestamp(t_end)
+            t_end = datetime.fromtimestamp(t_end,tz=UTC)
         r["to"] = t_end.strftime("%Y%m%dT%H%M%S")
     r = {"range": r}
     r = await asks_session.post(url, data=json.dumps(dict(select=series, where=tags, **r)))
@@ -115,12 +117,25 @@ async def get_data(
         return  # empty response
 
 
+_ts=re.compile(r"(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(?:\.(\d+))?")
 def parse_timestamp(ts):
     """Parse ISO formatted timestamp"""
-    try:
-        return datetime.strptime(ts.rstrip("0").rstrip(".") + " +0000", "%Y%m%dT%H%M%S.%f %z")
-    except ValueError:
-        return datetime.strptime(ts.rstrip("0").rstrip(".") + " +0000", "%Y%m%dT%H%M%S %z")
+    t = _ts.match(ts)
+    if t is None:
+        raise ValueError(ts)
+    Y,M,D,h,m,s,ss = t.groups()
+    Y=int(Y)
+    M=int(M)
+    D=int(D)
+    h=int(h)
+    m=int(m)
+    s=int(s)
+    if ss is not None:
+        ss = float("0."+ss)
+    else:
+        ss=0
+
+    return datetime(year=Y,month=M,day=D,hour=h,minute=m,second=s,microsecond=int(ss*1000000),tzinfo=UTC)
 
 
 def resp_encode(buf: List[bytes], data: ExtRespType):
