@@ -260,7 +260,7 @@ class Resp(AsyncResource):
                     self._heap_large.set()
                     self._heap_large = None
 
-                if self._heap[0].time <= self._t - self._delay:
+                if self._ending.is_set() or self._heap[0].time <= self._t - self._delay:
                     return heapq.heappop(self._heap)
                 self._t = time.time()
                 if self._heap[0].time <= self._t - self._delay:
