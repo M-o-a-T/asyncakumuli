@@ -5,8 +5,8 @@ import asks
 from contextlib import asynccontextmanager
 from asyncakumuli import connect, get_data as _get_data, get_max_ts as _get_max_ts
 
-TCP_PORT = (os.getpid() + 23) % 1000 + 50000
-HTTP_PORT = (os.getpid() + 24) % 1000 + 50000
+TCP_PORT = (os.getpid() + 23) % 10000 + 40000
+HTTP_PORT = (os.getpid() + 24) % 10000 + 40000
 URL = f"http://localhost:{HTTP_PORT}/api/query"
 
 
