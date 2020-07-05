@@ -301,7 +301,8 @@ class Resp(AsyncResource):
 
         buf = b"".join(self.buf)
         self.buf = []
-        await self.stream.send_all(buf)
+        if buf:
+            await self.stream.send_all(buf)
 
     async def receive(self):
         """
