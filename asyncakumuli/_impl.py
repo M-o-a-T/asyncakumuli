@@ -89,13 +89,13 @@ async def get_data(
     r = {}
     if t_start:
         if isinstance(t_start, (int, float)):
-            t_start = datetime.fromtimestamp(t_start,tz=UTC)
+            t_start = datetime.fromtimestamp(t_start, tz=UTC)
         r["from"] = t_start.strftime("%Y%m%dT%H%M%S")
     if t_end:
         if isinstance(t_end, (int, float)):
-            t_end = datetime.fromtimestamp(t_end,tz=UTC)
+            t_end = datetime.fromtimestamp(t_end, tz=UTC)
         r["to"] = t_end.strftime("%Y%m%dT%H%M%S")
-    r = {"select":series, "where":tags, "range": r}
+    r = {"select": series, "where": tags, "range": r}
     r = await asks_session.post(url, data=json.dumps(r))
 
     if r.status_code != 200:
@@ -117,25 +117,36 @@ async def get_data(
         return  # empty response
 
 
-_ts=re.compile(r"(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(?:\.(\d+))?")
+_ts = re.compile(r"(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(?:\.(\d+))?")
+
+
 def parse_timestamp(ts):
     """Parse ISO formatted timestamp"""
     t = _ts.match(ts)
     if t is None:
         raise ValueError(ts)
-    Y,M,D,h,m,s,ss = t.groups()
-    Y=int(Y)
-    M=int(M)
-    D=int(D)
-    h=int(h)
-    m=int(m)
-    s=int(s)
+    Y, M, D, h, m, s, ss = t.groups()
+    Y = int(Y)
+    M = int(M)
+    D = int(D)
+    h = int(h)
+    m = int(m)
+    s = int(s)
     if ss is not None:
-        ss = float("0."+ss)
+        ss = float("0." + ss)
     else:
-        ss=0
+        ss = 0
 
-    return datetime(year=Y,month=M,day=D,hour=h,minute=m,second=s,microsecond=int(ss*1000000),tzinfo=UTC)
+    return datetime(
+        year=Y,
+        month=M,
+        day=D,
+        hour=h,
+        minute=m,
+        second=s,
+        microsecond=int(ss * 1000000),
+        tzinfo=UTC,
+    )
 
 
 def resp_encode(buf: List[bytes], data: ExtRespType):
