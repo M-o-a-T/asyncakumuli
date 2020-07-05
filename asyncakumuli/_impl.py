@@ -314,6 +314,7 @@ class Resp(AsyncResource):
             return err.chunk
         if not line:
             return None
+
         if isinstance(line, str):
             if line[0] == "+":
                 return line[1 : -len(EOL)]
@@ -367,6 +368,8 @@ async def reader(s, task_status=None):
     with trio.CancelScope() as cs:
         task_status.started(cs)
         async for m in s:
+            if not m:
+                return
             raise RuntimeError(m)
 
 
