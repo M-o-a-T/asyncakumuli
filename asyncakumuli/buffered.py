@@ -1,4 +1,3 @@
-from trio import abc
 
 _DEFAULT_LIMIT = 4096
 
@@ -15,7 +14,7 @@ class LimitOverrunError(RuntimeError):
         self.offset = offset
 
 
-class AbstractStreamModifier(abc.HalfCloseableStream):  # pylint: disable=abstract-method
+class AbstractStreamModifier:  # pylint: disable=abstract-method
     """Interpose on top of a stream.
 
     Use this class as a base for writing your own stream modifiers.
@@ -33,8 +32,8 @@ class AbstractStreamModifier(abc.HalfCloseableStream):  # pylint: disable=abstra
     async def __aexit__(self, *err):
         return await self._lower_stream.__aexit__(*err)
 
-    async def aclose(self):
-        await self._lower_stream.aclose()
+    async def close(self):
+        await self._lower_stream.close()
 
     # SendStream
 
@@ -118,7 +117,7 @@ class BufferedReader(AbstractStreamModifier):
         """
         if self._lower_stream is None:
             return False
-        data = await self._lower_stream.receive_some()
+        data = await self._lower_stream.receive_some(len(self._read_buffer)+512)
         if not data:
             return False
         self._read_buffer.extend(data)

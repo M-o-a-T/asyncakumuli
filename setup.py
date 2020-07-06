@@ -14,7 +14,7 @@ setup(
     license="GPLv3 or later",
     packages=find_packages(),
     tests_require=["pytest-trio"],
-    install_requires=["trio", "pytz"],
+    install_requires=["anyio", "pytz"],
     keywords=["iot", "logging"],
     python_requires=">=3.6",
     classifiers=[
