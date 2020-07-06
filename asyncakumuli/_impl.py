@@ -244,7 +244,9 @@ class Resp:
         self._enqueue(dt)
         self._enqueue(pkt.ns_time)
         self._enqueue(pkt.value)
-        await self.flush_buf()
+        if len(self.buf) > 1000:
+            await self.flush_buf()
+
 
     async def put(self, pkt):
         """Store this packet, for eventual sending.
@@ -278,6 +280,7 @@ class Resp:
                 async with anyio.move_on_after(max(self._delay + self._heap[0].time - self._t, 0)):
                     await self._ending.wait()
 
+            await self.flush_buf()
             if self._done is not None:
                 await self._done.set()
             self._heap_item = anyio.create_event()
