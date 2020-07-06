@@ -15,3 +15,6 @@ Also included:
   to Akumuli
 * a couple of example scripts
 
+Tests and collectd support currently require Trio because (a) anyio doesn't
+support subprocesses, (b) UDP socket support in anyio is kindof limited.
+
