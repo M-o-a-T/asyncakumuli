@@ -5,7 +5,6 @@ import re
 from .buffered import BufferedReader, IncompleteReadError
 from .model import Entry, EntryDelta, tags2str
 import trio
-from trio.abc import AsyncResource
 from contextlib import asynccontextmanager
 import json
 import math
@@ -175,7 +174,7 @@ def resp_encode(buf: List[bytes], data: ExtRespType):
         raise NoCodeError(data)
 
 
-class Resp(AsyncResource):
+class Resp:
     """
     This class implements Akumuli's RESP submission protocol.
 
@@ -361,6 +360,12 @@ class Resp(AsyncResource):
                 return b
             else:
                 raise RespUnknownError(line[: -len(EOL)])
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        await self.aclose()
 
     def __aiter__(self):
         return self
