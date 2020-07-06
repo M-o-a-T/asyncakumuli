@@ -222,7 +222,8 @@ class Resp:
             for kk, vv in v.items():
                 di.append("%s %s" % (k, kk))
                 di.append(vv)
-        self._enqueue(di)
+        if di:
+            self._enqueue(di)
 
     async def close(self):
         await self.flush()
