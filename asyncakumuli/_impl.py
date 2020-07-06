@@ -404,7 +404,7 @@ async def connect(host="127.0.0.1", port=8282, **kw):
                 yield s
 
             finally:
-                async with anyio.move_on_after(5, shield=True) as sc:
+                async with anyio.move_on_after(5, shield=True):
                     await s.flush()
                     await anyio.sleep(0.3)  # let's hope that's enough to read errors
                 await tg.cancel_scope.cancel()

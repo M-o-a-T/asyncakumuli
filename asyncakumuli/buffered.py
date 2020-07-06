@@ -1,4 +1,3 @@
-
 _DEFAULT_LIMIT = 4096
 
 
@@ -117,7 +116,7 @@ class BufferedReader(AbstractStreamModifier):
         """
         if self._lower_stream is None:
             return False
-        data = await self._lower_stream.receive_some(len(self._read_buffer)+512)
+        data = await self._lower_stream.receive_some(len(self._read_buffer) + 512)
         if not data:
             return False
         self._read_buffer.extend(data)
