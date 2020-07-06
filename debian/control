@@ -10,6 +10,7 @@ Homepage: http://github.com/smurfix/asyncakumuli
 Package: python3-asyncakumuli
 Architecture: all
 Depends: ${misc:Depends}, ${python3:Depends},
+  python3-pytz,
 Recommends: akumuli
 Description: Write data to Akumuli (and read them)
  This library contains a small async wrapper for submission of data to,
