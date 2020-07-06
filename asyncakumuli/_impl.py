@@ -222,17 +222,16 @@ class Resp:
             for kk, vv in v.items():
                 di.append("%s %s" % (k, kk))
                 di.append(vv)
-        await self.send(di)
+        if di:
+            self._enqueue(di)
 
     async def close(self):
         await self.flush()
         await self.stream.close()
 
-    async def send(self, data: ExtRespType):
+    def _enqueue(self, data: ExtRespType):
         """Send this message."""
         resp_encode(self.buf, data)
-        if len(self.buf) > 1000:
-            await self.flush(heap=False)
 
     async def write(self, pkt: Entry):
         """Send the contents of this packet"""
@@ -242,9 +241,12 @@ class Resp:
         except KeyError:
             dt = "%s %s" % (pkt.series, tags)
 
-        await self.send(dt)
-        await self.send(pkt.ns_time)
-        await self.send(pkt.value)
+        self._enqueue(dt)
+        self._enqueue(pkt.ns_time)
+        self._enqueue(pkt.value)
+        if len(self.buf) > 1000:
+            await self.flush_buf()
+
 
     async def put(self, pkt):
         """Store this packet, for eventual sending.
@@ -278,6 +280,7 @@ class Resp:
                 async with anyio.move_on_after(max(self._delay + self._heap[0].time - self._t, 0)):
                     await self._ending.wait()
 
+            await self.flush_buf()
             if self._done is not None:
                 await self._done.set()
             self._heap_item = anyio.create_event()
@@ -298,17 +301,18 @@ class Resp:
             if e is not None:
                 await self.write(e)
 
-    async def flush(self, heap=True):
+    async def flush(self):
         """
         Send our write-buffered data.
         """
-        if heap and self._heap:
+        if self._heap:
             self._done = anyio.create_event()
             await self._ending.set()
             await self._done.wait()
             self._ending = anyio.create_event()
             self._done = None
 
+    async def flush_buf(self):
         buf = b"".join(self.buf)
         self.buf = []
         if buf:

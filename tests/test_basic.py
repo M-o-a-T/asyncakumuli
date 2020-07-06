@@ -6,7 +6,7 @@ async def test_basic():
     async with Tester().run() as tc:
         e = Entry(series="test-A", time=1500000000, value=123, tags={"foo": "one"}, mode=DS.gauge)
         await tc.put(e)
-        await tc.flush()
+        await anyio.sleep(0.1)
         n = 0
         async for x in tc.get_data("test-A", tags={}, t_start=1490000000, t_end=1510000000):
             n += 1
