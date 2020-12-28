@@ -1,6 +1,7 @@
 asyncakumuli (0.4.0-1) unstable; urgency=medium
 
   * Merge
+  * Depend on asks 2.4
 
  -- Matthias Urlichs <matthias@urlichs.de>  Mon, 28 Dec 2020 14:13:00 +0100
 
