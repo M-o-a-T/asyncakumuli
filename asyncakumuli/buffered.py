@@ -31,19 +31,16 @@ class AbstractStreamModifier:  # pylint: disable=abstract-method
     async def __aexit__(self, *err):
         return await self._lower_stream.__aexit__(*err)
 
-    async def close(self):
-        await self._lower_stream.close()
+    async def aclose(self):
+        await self._lower_stream.aclose()
 
     # SendStream
 
-    async def send_all(self, data):
-        await self._lower_stream.send_all(data)
+    async def send(self, data):
+        await self._lower_stream.send(data)
 
     async def send_eof(self):
         await self._lower_stream.send_eof()
-
-    async def wait_send_all_might_not_block(self):
-        return
 
 
 class BufferedReader(AbstractStreamModifier):
