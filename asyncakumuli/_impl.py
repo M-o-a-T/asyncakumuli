@@ -225,9 +225,9 @@ class Resp:
         if di:
             self._enqueue(di)
 
-    async def close(self):
+    async def aclose(self):
         await self.flush()
-        await self.stream.close()
+        await self.stream.aclose()
 
     def _enqueue(self, data: ExtRespType):
         """Send this message."""
@@ -286,7 +286,7 @@ class Resp:
             self._heap_item = anyio.create_event()
             await self._heap_item.wait()
 
-    async def send_all(self, evt: anyio.abc.Event = None):
+    async def send(self, evt: anyio.abc.Event = None):
         """
         Send loop.
         """
@@ -316,7 +316,7 @@ class Resp:
         buf = b"".join(self.buf)
         self.buf = []
         if buf:
-            await self.stream.send_all(buf)
+            await self.stream.send(buf)
 
     async def receive(self):
         """
@@ -369,7 +369,7 @@ class Resp:
         return self
 
     async def __aexit__(self, *args):
-        await self.close()
+        await self.aclose()
 
     def __aiter__(self):
         return self
@@ -401,7 +401,7 @@ async def connect(host="127.0.0.1", port=8282, **kw):
         async with await anyio.connect_tcp(host, port) as st:
             s = Resp(st, **kw)
             evt = anyio.create_event()
-            await tg.spawn(s.send_all, evt)
+            await tg.spawn(s.send, evt)
             await evt.wait()
             await tg.spawn(reader, s)
             try:

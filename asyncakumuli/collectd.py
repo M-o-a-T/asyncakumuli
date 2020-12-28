@@ -514,7 +514,7 @@ class Reader:
             yield self
         finally:
             if self._sock is not None:
-                self._sock.close()
+                await self._sock.aclose()
 
     async def _init(self):
         family, socktype, proto, canonname, sockaddr = (
