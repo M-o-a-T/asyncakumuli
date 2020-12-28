@@ -377,7 +377,7 @@ class Resp:
     async def __anext__(self):
         try:
             r = await self.receive()
-        except anyio.exceptions.ClosedResourceError:
+        except anyio.ClosedResourceError:
             raise StopAsyncIteration from None
         if r is None:
             raise StopAsyncIteration
