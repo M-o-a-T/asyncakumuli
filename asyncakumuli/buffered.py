@@ -84,7 +84,7 @@ class BufferedReader(AbstractStreamModifier):
             info.append(f"limit={self._read_limit}")
         return "<{}>".format(" ".join(info))
 
-    async def receive_some(self, n=None):  # pylint: disable=arguments-differ
+    async def receive(self, n=None):  # pylint: disable=arguments-differ
         """Get at most n bytes from the buffer.
 
         If the buffer is empty, fill it.
@@ -93,7 +93,7 @@ class BufferedReader(AbstractStreamModifier):
         if not buf:
             if self._lower_stream is None:
                 return None
-            data = await self._lower_stream.receive_some(n or self._read_limit)
+            data = await self._lower_stream.receive(n or self._read_limit)
             if not data:
                 return data
             if n is None or len(data) <= n:
@@ -116,7 +116,7 @@ class BufferedReader(AbstractStreamModifier):
         """
         if self._lower_stream is None:
             return False
-        data = await self._lower_stream.receive_some(len(self._read_buffer) + 512)
+        data = await self._lower_stream.receive(len(self._read_buffer) + 512)
         if not data:
             return False
         self._read_buffer.extend(data)
