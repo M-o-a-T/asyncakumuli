@@ -1,5 +1,6 @@
 _DEFAULT_LIMIT = 4096
 
+from anyio import EndOfStream
 
 class IncompleteReadError(RuntimeError):
     def __init__(self, chunk):
@@ -113,8 +114,9 @@ class BufferedReader(AbstractStreamModifier):
         """
         if self._lower_stream is None:
             return False
-        data = await self._lower_stream.receive(len(self._read_buffer) + 512)
-        if not data:
+        try:
+            data = await self._lower_stream.receive(len(self._read_buffer) + 512)
+        except EndOfStream:
             return False
         self._read_buffer.extend(data)
         return len(data)
