@@ -156,9 +156,9 @@ def resp_encode(buf: List[bytes], data: ExtRespType):
     """
     if isinstance(data, str) and "\r" not in data and "\n" not in data:
         buf.append(b"+" + str(data).encode("utf-8") + EOL)
-    elif isinstance(data, int):
+    elif isinstance(data, int) and data >= 0:
         buf.append(b":" + str(data).encode("ascii") + EOL)
-    elif isinstance(data, float):
+    elif isinstance(data, (float,int)):
         buf.append(b"+" + str(data).encode("ascii") + EOL)
     elif isinstance(data, BaseException):
         buf.append(b"-" + str(data).encode("utf-8") + EOL)
