@@ -164,7 +164,7 @@ class EntryDelta:
                 t = entry.ns_time
             if ot >= t:
                 return
-            r = t - ot
+            r = (t - ot) / 1000000000  # nsec > sec
             self._last[k] = (entry.value, t)
 
             if entry.mode == DS.derive:
