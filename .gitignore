@@ -4,3 +4,5 @@ __pycache__
 /asyncakumuli.egg-info/
 /dist/
 /.eggs/
+/build/
+/debian/
