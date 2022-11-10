@@ -3,8 +3,7 @@
 from enum import IntEnum
 from datetime import datetime
 from time import time_ns
-
-from typing import Dict
+from typing import Dict, Union
 
 __all__ = ["Entry", "DS"]
 
@@ -30,7 +29,14 @@ class Entry:
     interval = None
     ns_time = None
 
-    def __init__(self, value: int, series: str, tags: dict = None, time=None, mode: DS = None):
+    def __init__(
+        self,
+        value: int,
+        series: str,
+        tags: Union[dict, str] = None,
+        time=None,
+        mode: DS = None,
+    ):
         """
         Time may be a datetime instance, a number of seconds, or nanoseconds
         """
@@ -44,6 +50,8 @@ class Entry:
         self.value = value
         self.ns_time = time
         self.series = series
+        if isinstance(tags, str):
+            tags = str2tags(tags)
         self.tags = tags
         if mode is not None:
             self.mode = mode
