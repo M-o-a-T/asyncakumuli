@@ -1,18 +1,20 @@
 #
 # Stream adapter for RESP
 
-import re
-from .buffered import BufferedReader, IncompleteReadError
-from .model import Entry, EntryDelta, tags2str
-import anyio
-from contextlib import asynccontextmanager
+import heapq
 import json
 import math
-import heapq
+import re
 import time
-from typing import Union, Iterable, List, Mapping
+from contextlib import asynccontextmanager
 from datetime import datetime
+from typing import Iterable, List, Mapping, Union
+
+import anyio
 from pytz import UTC
+
+from .buffered import BufferedReader, IncompleteReadError
+from .model import Entry, EntryDelta, tags2str
 
 EOL = b"\r\n"
 
@@ -179,7 +181,7 @@ def resp_encode(buf: List[bytes], data: ExtRespType):
         buf.append(b"+" + str(data).encode("utf-8") + EOL)
     elif isinstance(data, int) and data >= 0:
         buf.append(b":" + str(data).encode("ascii") + EOL)
-    elif isinstance(data, (float,int)):
+    elif isinstance(data, (float, int)):
         buf.append(b"+" + str(data).encode("ascii") + EOL)
     elif isinstance(data, BaseException):
         buf.append(b"-" + str(data).encode("utf-8") + EOL)
@@ -268,10 +270,8 @@ class Resp:
         if len(self.buf) > 1000:
             await self.flush_buf()
 
-
     async def put(self, pkt):
-        """Store this packet, for eventual sending.
-        """
+        """Store this packet, for eventual sending."""
         heapq.heappush(self._heap, pkt)
         if self._heap_item is not None:
             self._heap_item.set()

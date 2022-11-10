@@ -1,7 +1,7 @@
 # data model
 
-from enum import IntEnum
 from datetime import datetime
+from enum import IntEnum
 from time import time_ns
 from typing import Dict, Union
 
@@ -61,6 +61,12 @@ class Entry:
         return self.ns_time / 1000000000
 
     @property
+    def date(self):
+        from pytz import UTC
+
+        return datetime.fromtimestamp(self.time, UTC)
+
+    @property
     def tags(self):
         return self._tags
 
@@ -92,7 +98,7 @@ class Entry:
 
     @property
     def key(self):
-        """Key for hashing / """
+        """Key for hashing /"""
         return (self.series, self.tags_str)
 
     @property
@@ -110,7 +116,13 @@ class Entry:
         )
 
     def __str__(self):
-        return "%s %s@%s %s %s" % (self.value, self.mode, self.ns_time, self.series, self.tags_str)
+        return "%s %s@%s %s %s" % (
+            self.value,
+            self.mode,
+            self.ns_time,
+            self.series,
+            self.tags_str,
+        )
 
 
 def str2tags(tags):
@@ -179,10 +191,10 @@ class EntryDelta:
                 entry.value = (v - ov) / r
             elif entry.mode == DS.counter:
                 if v < ov:
-                    if ov < 2 ** 32:
-                        v += 2 ** 32
+                    if ov < 2**32:
+                        v += 2**32
                     else:
-                        v += 2 ** 64
+                        v += 2**64
                 entry.value = (v - ov) / r
             elif entry.mode == DS.absolute:
                 entry.value /= r
@@ -196,16 +208,16 @@ class EntryDelta:
         try:
             prev = self._prev[k]
         except KeyError:
-            entry.__dup = False
+            entry.__dup = False  # pylint: disable=unused-private-member
             return None
         else:
             if prev.value == entry.value and (entry.mode != DS.delta or entry.value == 0):
                 # We cannot skip identical Delta values unless they're zero.
-                entry.__dup = True
+                entry.__dup = True  # pylint: disable=unused-private-member
                 if prev.__dup:
                     return None
             else:
-                entry.__dup = False
+                entry.__dup = False  # pylint: disable=unused-private-member
             if prev.mode < DS.delta:
                 prev.mode = DS.gauge
             return prev
@@ -232,7 +244,7 @@ class EntryDelta:
         k = entry.key
         if k in self._prev:
             raise RuntimeError("known", k)
-        entry.__dup = False
+        entry.__dup = False  # pylint: disable=unused-private-member
         self._prev[k] = entry
         if entry.mode in {DS.counter, DS.derive, DS.absolute}:
             self._last = (entry.abs_value, entry.ns_time)

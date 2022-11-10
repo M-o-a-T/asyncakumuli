@@ -2,6 +2,7 @@ _DEFAULT_LIMIT = 4096
 
 from anyio import EndOfStream
 
+
 class IncompleteReadError(RuntimeError):
     def __init__(self, chunk):
         super().__init__()
@@ -45,11 +46,14 @@ class AbstractStreamModifier:  # pylint: disable=abstract-method
 
 
 class BufferedReader(AbstractStreamModifier):
-    """A stream modifier that buffers read data.
-    """
+    """A stream modifier that buffers read data."""
 
     def __init__(
-        self, lower_stream=None, data=None, read_limit=_DEFAULT_LIMIT // 2, write_limit=0
+        self,
+        lower_stream=None,
+        data=None,
+        read_limit=_DEFAULT_LIMIT // 2,
+        write_limit=0,  # pylint:disable=unused-argument
     ):
         if (lower_stream is None) == (data is None):
             raise RuntimeError("provide either lower_stream or data")
@@ -146,7 +150,7 @@ class BufferedReader(AbstractStreamModifier):
                 del buf[: e.offset + seplen]
             else:
                 buf.clear()
-            raise ValueError(e.args[0])
+            raise ValueError(e.args[0]) from e
         return line
 
     async def readuntil(self, separator=b"\n"):

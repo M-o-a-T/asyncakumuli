@@ -1,11 +1,12 @@
-import anyio
 import datetime
+from contextlib import aclosing
+
+import anyio
 from pytz import UTC
 
+from asyncakumuli import DS, Entry
 from asyncakumuli.mock import Tester
-from asyncakumuli import Entry, DS
 
-from contextlib import aclosing
 
 async def test_basic():
     async with Tester().run() as tc:

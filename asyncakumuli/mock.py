@@ -1,9 +1,13 @@
 import os
-import trio
 import tempfile
-import asks
 from contextlib import asynccontextmanager
-from asyncakumuli import connect, get_data as _get_data, get_max_ts as _get_max_ts
+
+import asks
+import trio
+
+from asyncakumuli import connect
+from asyncakumuli import get_data as _get_data
+from asyncakumuli import get_max_ts as _get_max_ts
 
 TCP_PORT = (os.getpid() + 23) % 10000 + 40000
 HTTP_PORT = (os.getpid() + 24) % 10000 + 40000
@@ -18,11 +22,12 @@ class Tester:
     @staticmethod
     @asynccontextmanager
     async def _daemon(http=HTTP_PORT, tcp=TCP_PORT):
-        with tempfile.TemporaryDirectory() as d:
-            cfg = os.path.join(d, "test.cfg")
-            with open(cfg, "w") as f:
-                print(
-                    f"""\
+        async with trio.open_nursery() as n:
+            with tempfile.TemporaryDirectory() as d:
+                cfg = os.path.join(d, "test.cfg")
+                with open(cfg, "w", encoding="utf-8") as f:
+                    print(
+                        f"""\
 path={d}
 nvolumes=0
 volume_size=2MB
@@ -41,28 +46,30 @@ log4j.appender.file.filename={d}/akumuli.log
 log4j.appender.file.datePattern='.'yyyy-MM-dd
 
 """,
-                    file=f,
+                        file=f,
+                    )
+                print(d)
+                proc = await trio.run_process(
+                    ["akumulid", "--create", "--allocate", "--config", cfg]
                 )
-            print(d)
-            proc = await trio.run_process(["akumulid", "--create", "--allocate", "--config", cfg])
-            proc = await trio.open_process(["akumulid", "--config", cfg])
-            try:
-                with trio.fail_after(10):
-                    while True:
-                        try:
-                            s = await trio.open_tcp_stream("127.0.0.1", TCP_PORT)
-                            await s.aclose()
-                            break
-                        except OSError:
-                            await trio.sleep(0.1)
-                yield proc
-            finally:
-                proc.terminate()
-                with trio.move_on_after(2) as cs:
-                    cs.shield = True
-                    await proc.wait()
-                if proc.poll() is None:
-                    proc.kill()
+                proc = await n.start(trio.run_process, ["akumulid", "--config", cfg])
+                try:
+                    with trio.fail_after(10):
+                        while True:
+                            try:
+                                s = await trio.open_tcp_stream("127.0.0.1", TCP_PORT)
+                                await s.aclose()
+                                break
+                            except OSError:
+                                await trio.sleep(0.1)
+                    yield proc
+                finally:
+                    proc.terminate()
+                    with trio.move_on_after(2) as cs:
+                        cs.shield = True
+                        await proc.wait()
+                    if proc.poll() is None:
+                        proc.kill()
 
     @asynccontextmanager
     async def run(self):

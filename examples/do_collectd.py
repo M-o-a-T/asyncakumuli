@@ -46,7 +46,7 @@ async def read_all():
 
     async def read_rrd(remote,fn):
         """
-        Dump a RRD fiel to XML and parse it.
+        Dump a RRD file to XML and parse it.
         """
         if remote:
             # This is a hack
