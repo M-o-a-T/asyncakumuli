@@ -106,7 +106,7 @@ async def get_data(
     if aggregate:
         r["aggregate"] = {series: aggregate}
     else:
-        r["series"] = series
+        r["select"] = series
     if pivot is not None:
         if isinstance(pivot, str):
             pivot = (pivot,)
