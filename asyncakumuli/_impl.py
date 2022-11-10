@@ -80,7 +80,15 @@ async def get_max_ts(asks_session, series: str, tags: dict = (), url: str = _url
 
 
 async def get_data(
-    asks_session, series: str, tags: dict, t_start=None, t_end=None, url: str = _url
+    asks_session,
+    series: str,
+    tags: dict,
+    t_start=None,
+    t_end=None,
+    url: str = _url,
+    aggregate: str = False,
+    group: Union[str, list] = None,
+    pivot: Union[str, list] = None,
 ):
     """
     Read some data.
@@ -94,7 +102,19 @@ async def get_data(
         if isinstance(t_end, (int, float)):
             t_end = datetime.fromtimestamp(t_end, tz=UTC)
         r["to"] = t_end.strftime("%Y%m%dT%H%M%S")
-    r = {"select": series, "where": tags, "range": r}
+    r = {"where": tags, "range": r}
+    if aggregate:
+        r["aggregate"] = {series: aggregate}
+    else:
+        r["series"] = series
+    if pivot is not None:
+        if isinstance(pivot, str):
+            pivot = (pivot,)
+        r["pivot-by-tag"] = pivot
+    if group is not None:
+        if isinstance(group, str):
+            group = (group,)
+        r["group-by-tag"] = group
     r = await asks_session.post(url, data=json.dumps(r))
 
     if r.status_code != 200:
