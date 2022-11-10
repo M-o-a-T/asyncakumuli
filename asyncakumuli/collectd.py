@@ -12,14 +12,14 @@ Collectd network protocol implementation,
 forwarding to akumuli.
 """
 
-import trio
-from trio import socket
+import re
 import struct
 from contextlib import asynccontextmanager
+from copy import deepcopy
 from enum import IntEnum
 
-from copy import deepcopy
-import re
+import trio
+from trio import socket
 
 from .model import DS, Entry
 
@@ -59,8 +59,7 @@ double = struct.Struct("<d")
 
 
 def decode_network_values(ptype, plen, buf):  # pylint: disable=unused-argument
-    """Decodes a list of DS values in collectd network format
-    """
+    """Decodes a list of DS values in collectd network format"""
     nvalues = short.unpack_from(buf, header.size)[0]
     off = header.size + short.size + nvalues
     valskip = double.size
@@ -86,24 +85,21 @@ def decode_network_values(ptype, plen, buf):  # pylint: disable=unused-argument
     return result
 
 
-HIRES_SCALE = 2 ** 30
+HIRES_SCALE = 2**30
 
 
 def decode_network_number(ptype, plen, buf):  # pylint: disable=unused-argument
-    """Decodes a number (64-bit unsigned) in collectd network format.
-    """
+    """Decodes a number (64-bit unsigned) in collectd network format."""
     return number.unpack_from(buf, header.size)[0]
 
 
 def decode_network_number_hr(ptype, plen, buf):  # pylint: disable=unused-argument
-    """Decodes a number (64-bit unsigned, accurracy 2^-30) in collectd network format.
-    """
+    """Decodes a number (64-bit unsigned, accurracy 2^-30) in collectd network format."""
     return number.unpack_from(buf, header.size)[0] / HIRES_SCALE
 
 
 def decode_network_string(msgtype, plen, buf):  # pylint: disable=unused-argument
-    """Decodes a floating point number (64-bit) in collectd network format.
-    """
+    """Decodes a floating point number (64-bit) in collectd network format."""
     return buf[header.size : plen - 1].decode("utf-8")
 
 
@@ -125,8 +121,7 @@ _decoders = {
 
 
 def decode_network_packet(buf):
-    """Decodes a network packet in collectd format.
-    """
+    """Decodes a network packet in collectd format."""
     off = 0
     blen = len(buf)
     while off < blen:
@@ -473,7 +468,11 @@ class Reader:
     BUFFER_SIZE = 10240
 
     def __init__(
-        self, host=None, db="/usr/share/collectd/types.db", port=DEFAULT_PORT, multicast=False
+        self,
+        host=None,
+        db="/usr/share/collectd/types.db",
+        port=DEFAULT_PORT,
+        multicast=False,
     ):
         if host is None:
             multicast = True
@@ -517,7 +516,7 @@ class Reader:
                 await self._sock.aclose()
 
     async def _init(self):
-        family, socktype, proto, canonname, sockaddr = (
+        family, socktype, proto, _canonname, sockaddr = (
             await socket.getaddrinfo(
                 None if self.multicast else self.host,
                 self.port,
@@ -557,13 +556,11 @@ class Reader:
             )
 
     async def receive(self):
-        """Receives a single raw collect network packet.
-        """
+        """Receives a single raw collect network packet."""
         return await self._sock.recv(self.BUFFER_SIZE)
 
     async def decode(self, buf=None):
-        """Decodes a given buffer or the next received packet.
-        """
+        """Decodes a given buffer or the next received packet."""
         if buf is None:
             buf = await self.receive()
         return decode_network_packet(buf)
@@ -607,8 +604,7 @@ class Reader:
                     yield deepcopy(vl)
 
     async def interpret(self, iterable=None):
-        """Interprets a sequence
-        """
+        """Interprets a sequence"""
         if iterable is None:
             iterable = await self.decode()
         if isinstance(iterable, str):

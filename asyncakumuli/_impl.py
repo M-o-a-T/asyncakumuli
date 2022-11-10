@@ -1,18 +1,20 @@
 #
 # Stream adapter for RESP
 
-import re
-from .buffered import BufferedReader, IncompleteReadError
-from .model import Entry, EntryDelta, tags2str
-import anyio
-from contextlib import asynccontextmanager
+import heapq
 import json
 import math
-import heapq
+import re
 import time
-from typing import Union, Iterable, List, Mapping
+from contextlib import asynccontextmanager
 from datetime import datetime
+from typing import Iterable, List, Mapping, Union
+
+import anyio
 from pytz import UTC
+
+from .buffered import BufferedReader, IncompleteReadError
+from .model import Entry, EntryDelta, tags2str
 
 EOL = b"\r\n"
 
@@ -80,7 +82,15 @@ async def get_max_ts(asks_session, series: str, tags: dict = (), url: str = _url
 
 
 async def get_data(
-    asks_session, series: str, tags: dict, t_start=None, t_end=None, url: str = _url
+    asks_session,
+    series: str,
+    tags: dict,
+    t_start=None,
+    t_end=None,
+    url: str = _url,
+    aggregate: str = False,
+    group: Union[str, list] = None,
+    pivot: Union[str, list] = None,
 ):
     """
     Read some data.
@@ -94,7 +104,19 @@ async def get_data(
         if isinstance(t_end, (int, float)):
             t_end = datetime.fromtimestamp(t_end, tz=UTC)
         r["to"] = t_end.strftime("%Y%m%dT%H%M%S")
-    r = {"select": series, "where": tags, "range": r}
+    r = {"where": tags, "range": r}
+    if aggregate:
+        r["aggregate"] = {series: aggregate}
+    else:
+        r["select"] = series
+    if pivot is not None:
+        if isinstance(pivot, str):
+            pivot = (pivot,)
+        r["pivot-by-tag"] = pivot
+    if group is not None:
+        if isinstance(group, str):
+            group = (group,)
+        r["group-by-tag"] = group
     r = await asks_session.post(url, data=json.dumps(r))
 
     if r.status_code != 200:
@@ -111,7 +133,8 @@ async def get_data(
                 res = int(res)
             except ValueError:
                 res = float(res)
-            yield res, tm
+            series, tags = tags.split(" ", 1)
+            yield Entry(res, series, tags, tm)
     else:
         return  # empty response
 
@@ -158,7 +181,7 @@ def resp_encode(buf: List[bytes], data: ExtRespType):
         buf.append(b"+" + str(data).encode("utf-8") + EOL)
     elif isinstance(data, int) and data >= 0:
         buf.append(b":" + str(data).encode("ascii") + EOL)
-    elif isinstance(data, (float,int)):
+    elif isinstance(data, (float, int)):
         buf.append(b"+" + str(data).encode("ascii") + EOL)
     elif isinstance(data, BaseException):
         buf.append(b"-" + str(data).encode("utf-8") + EOL)
@@ -203,7 +226,7 @@ class Resp:
         self._heap_large: anyio.abc.Event = None  # waits for heap emptying
         self._heap_item: anyio.abc.Event = None  # waits for heappush
         self._done: anyio.abc.Event = None  # flushing done
-        self._ending: anyio.abc.Event = anyio.create_event()  # flush
+        self._ending: anyio.abc.Event = anyio.Event()  # flush
         self._heap_max = size  # 100
 
     def preload(self, series: str, tags: RespTags):
@@ -247,18 +270,16 @@ class Resp:
         if len(self.buf) > 1000:
             await self.flush_buf()
 
-
     async def put(self, pkt):
-        """Store this packet, for eventual sending.
-        """
+        """Store this packet, for eventual sending."""
         heapq.heappush(self._heap, pkt)
         if self._heap_item is not None:
-            await self._heap_item.set()
+            self._heap_item.set()
             self._heap_item = None
 
         if self._heap_max > 0:
             if self._heap_large is None and len(self._heap) >= self._heap_max:
-                self._heap_large = anyio.create_event()
+                self._heap_large = anyio.Event()
             if self._heap_large is not None:
                 await self._heap_large.wait()
 
@@ -269,7 +290,7 @@ class Resp:
         while True:
             while self._heap:
                 if self._heap_large is not None and len(self._heap) < self._heap_max / 2:
-                    await self._heap_large.set()
+                    self._heap_large.set()
                     self._heap_large = None
 
                 if self._ending.is_set() or self._heap[0].time <= self._t - self._delay:
@@ -277,13 +298,13 @@ class Resp:
                 self._t = time.time()
                 if self._heap[0].time <= self._t - self._delay:
                     return heapq.heappop(self._heap)
-                async with anyio.move_on_after(max(self._delay + self._heap[0].time - self._t, 0)):
+                with anyio.move_on_after(max(self._delay + self._heap[0].time - self._t, 0)):
                     await self._ending.wait()
 
             await self.flush_buf()
             if self._done is not None:
-                await self._done.set()
-            self._heap_item = anyio.create_event()
+                self._done.set()
+            self._heap_item = anyio.Event()
             await self._heap_item.wait()
 
     async def send(self, evt: anyio.abc.Event = None):
@@ -291,7 +312,7 @@ class Resp:
         Send loop.
         """
         self._t = time.time()
-        await evt.set()
+        evt.set()
 
         while True:
             e = await self._next_to_send()
@@ -306,10 +327,10 @@ class Resp:
         Send our write-buffered data.
         """
         if self._heap:
-            self._done = anyio.create_event()
-            await self._ending.set()
+            self._done = anyio.Event()
+            self._ending.set()
             await self._done.wait()
-            self._ending = anyio.create_event()
+            self._ending = anyio.Event()
             self._done = None
 
     async def flush_buf(self):
@@ -400,15 +421,15 @@ async def connect(host="127.0.0.1", port=8282, **kw):
     async with anyio.create_task_group() as tg:
         async with await anyio.connect_tcp(host, port) as st:
             s = Resp(st, **kw)
-            evt = anyio.create_event()
-            await tg.spawn(s.send, evt)
+            evt = anyio.Event()
+            tg.start_soon(s.send, evt)
             await evt.wait()
-            await tg.spawn(reader, s)
+            tg.start_soon(reader, s)
             try:
                 yield s
 
             finally:
-                async with anyio.move_on_after(5, shield=True):
+                with anyio.move_on_after(5, shield=True):
                     await s.flush()
                     await anyio.sleep(0.3)  # let's hope that's enough to read errors
-                await tg.cancel_scope.cancel()
+                tg.cancel_scope.cancel()

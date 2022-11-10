@@ -1,4 +1,4 @@
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 LONG_DESC = open("README.rst", encoding="utf-8").read()
 
@@ -14,7 +14,7 @@ setup(
     license="GPLv3 or later",
     packages=find_packages(),
     tests_require=["pytest-trio"],
-    install_requires=["anyio >= 2", "pytz"],
+    install_requires=["anyio >= 3", "pytz"],
     keywords=["iot", "logging"],
     python_requires=">=3.6",
     classifiers=[
