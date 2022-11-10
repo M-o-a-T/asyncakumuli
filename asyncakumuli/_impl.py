@@ -224,7 +224,7 @@ class Resp:
         self._heap_large: anyio.abc.Event = None  # waits for heap emptying
         self._heap_item: anyio.abc.Event = None  # waits for heappush
         self._done: anyio.abc.Event = None  # flushing done
-        self._ending: anyio.abc.Event = anyio.create_event()  # flush
+        self._ending: anyio.abc.Event = anyio.Event()  # flush
         self._heap_max = size  # 100
 
     def preload(self, series: str, tags: RespTags):
@@ -274,12 +274,12 @@ class Resp:
         """
         heapq.heappush(self._heap, pkt)
         if self._heap_item is not None:
-            await self._heap_item.set()
+            self._heap_item.set()
             self._heap_item = None
 
         if self._heap_max > 0:
             if self._heap_large is None and len(self._heap) >= self._heap_max:
-                self._heap_large = anyio.create_event()
+                self._heap_large = anyio.Event()
             if self._heap_large is not None:
                 await self._heap_large.wait()
 
@@ -290,7 +290,7 @@ class Resp:
         while True:
             while self._heap:
                 if self._heap_large is not None and len(self._heap) < self._heap_max / 2:
-                    await self._heap_large.set()
+                    self._heap_large.set()
                     self._heap_large = None
 
                 if self._ending.is_set() or self._heap[0].time <= self._t - self._delay:
@@ -298,13 +298,13 @@ class Resp:
                 self._t = time.time()
                 if self._heap[0].time <= self._t - self._delay:
                     return heapq.heappop(self._heap)
-                async with anyio.move_on_after(max(self._delay + self._heap[0].time - self._t, 0)):
+                with anyio.move_on_after(max(self._delay + self._heap[0].time - self._t, 0)):
                     await self._ending.wait()
 
             await self.flush_buf()
             if self._done is not None:
-                await self._done.set()
-            self._heap_item = anyio.create_event()
+                self._done.set()
+            self._heap_item = anyio.Event()
             await self._heap_item.wait()
 
     async def send(self, evt: anyio.abc.Event = None):
@@ -312,7 +312,7 @@ class Resp:
         Send loop.
         """
         self._t = time.time()
-        await evt.set()
+        evt.set()
 
         while True:
             e = await self._next_to_send()
@@ -327,10 +327,10 @@ class Resp:
         Send our write-buffered data.
         """
         if self._heap:
-            self._done = anyio.create_event()
-            await self._ending.set()
+            self._done = anyio.Event()
+            self._ending.set()
             await self._done.wait()
-            self._ending = anyio.create_event()
+            self._ending = anyio.Event()
             self._done = None
 
     async def flush_buf(self):
@@ -421,15 +421,15 @@ async def connect(host="127.0.0.1", port=8282, **kw):
     async with anyio.create_task_group() as tg:
         async with await anyio.connect_tcp(host, port) as st:
             s = Resp(st, **kw)
-            evt = anyio.create_event()
-            await tg.spawn(s.send, evt)
+            evt = anyio.Event()
+            tg.start_soon(s.send, evt)
             await evt.wait()
-            await tg.spawn(reader, s)
+            tg.start_soon(reader, s)
             try:
                 yield s
 
             finally:
-                async with anyio.move_on_after(5, shield=True):
+                with anyio.move_on_after(5, shield=True):
                     await s.flush()
                     await anyio.sleep(0.3)  # let's hope that's enough to read errors
-                await tg.cancel_scope.cancel()
+                tg.cancel_scope.cancel()
