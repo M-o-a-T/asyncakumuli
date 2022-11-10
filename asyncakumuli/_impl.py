@@ -131,7 +131,8 @@ async def get_data(
                 res = int(res)
             except ValueError:
                 res = float(res)
-            yield res, tm
+            series, tags = tags.split(" ", 1)
+            yield Entry(res, series, tags, tm)
     else:
         return  # empty response
 
