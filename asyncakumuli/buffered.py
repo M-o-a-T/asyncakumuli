@@ -57,6 +57,8 @@ class BufferedReader(AbstractStreamModifier):
     ):
         if (lower_stream is None) == (data is None):
             raise RuntimeError("provide either lower_stream or data")
+        if lower_stream is not None:
+            lower_stream = aiter(lower_stream)
         super().__init__(lower_stream=lower_stream)
         self._read_limit = read_limit
         if data is None:
@@ -66,6 +68,14 @@ class BufferedReader(AbstractStreamModifier):
 
         if read_limit <= 0:
             raise ValueError("Limit cannot be <= 0")
+
+    async def _rd(self, n):
+        ls = self._lower_stream
+        if hasattr(ls,"receive"):
+            return await ls.receive(n)
+        if hasattr(ls,"read_size"):
+            ls.read_size = n
+        return await ls.__anext__()
 
     @property
     def read_buffer(self):
@@ -95,7 +105,7 @@ class BufferedReader(AbstractStreamModifier):
         if not buf:
             if self._lower_stream is None:
                 return None
-            data = await self._lower_stream.receive(n or self._read_limit)
+            data = await self._rd(n or self._read_limit)
             if not data:
                 return data
             if n is None or len(data) <= n:
@@ -119,7 +129,7 @@ class BufferedReader(AbstractStreamModifier):
         if self._lower_stream is None:
             return False
         try:
-            data = await self._lower_stream.receive(len(self._read_buffer) + 512)
+            data = await self._rd(len(self._read_buffer) + 512)
         except EndOfStream:
             return False
         self._read_buffer.extend(data)
