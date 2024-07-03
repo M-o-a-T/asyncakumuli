@@ -117,12 +117,12 @@ async def get_data(
         if isinstance(group, str):
             group = (group,)
         r["group-by-tag"] = group
-    r = await asks_session.post(url, data=json.dumps(r))
+    r = await asks_session.post(url, data=json.dumps(r), stream=True)
 
     if r.status_code != 200:
         raise RespError(r.reason_phrase, r.raw)
-    elif r.raw != b"":
-        br = Resp(BufferedReader(data=r.raw))
+    else:
+        br = Resp(BufferedReader(r.body))
         while True:
             tags = await br.receive()  # ignore value
             if not tags:
@@ -135,8 +135,6 @@ async def get_data(
                 res = float(res)
             series, tags = tags.split(" ", 1)
             yield Entry(res, series, tags, tm)
-    else:
-        return  # empty response
 
 
 _ts = re.compile(r"(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(?:\.(\d+))?")
