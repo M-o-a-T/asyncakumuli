@@ -124,8 +124,9 @@ async def get_data(
     else:
         br = Resp(BufferedReader(r.body))
         while True:
-            tags = await br.receive()  # ignore value
-            if not tags:
+            try:
+                tags = await br.receive()  # ignore value
+            except StopAsyncIteration:
                 return
             tm = parse_timestamp(await br.receive())
             res = await br.receive()
