@@ -31,6 +31,8 @@ homepage = "http://github.com/smurfix/asyncakumuli"
 email = "matthias@urlichs.de"
 name = "Matthias Urlichs"
 
+[tool.setuptools_scm]
+
 [tool.pytest]
 filterwarnings = [ "error" ]
 addopts = [ "--verbose" ]
