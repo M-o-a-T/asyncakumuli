@@ -35,7 +35,14 @@ name = "Matthias Urlichs"
 
 [tool.pytest]
 filterwarnings = [ "error" ]
-addopts = [ "--verbose" ]
+addopts = [ "-x" ]
+log_cli_level = "DEBUG"
+pythonpath = [
+  ".",
+]
+testpaths = [
+  "tests",
+]
 
 [tool.black]
 line-length = 99
