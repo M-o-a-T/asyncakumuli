@@ -4,7 +4,7 @@ Section: python
 Priority: optional
 Build-Depends: dh-python, python3-setuptools, python3-all, debhelper (>= 13),
   python3-pytest-trio,
-  python3-asks (>= 2.4),
+  python3-httpx,
   python3-tz,
 Standards-Version: 3.9.6
 Homepage: http://github.com/smurfix/asyncakumuli
@@ -13,7 +13,7 @@ Package: python3-asyncakumuli
 Architecture: all
 Depends: ${misc:Depends}, ${python3:Depends},
   python3-tz,
-  python3-asks (>= 2.4),
+  python3-httpx,
 Recommends: akumuli
 Description: Write data to Akumuli (and read them)
  This library contains a small async wrapper for submission of data to,

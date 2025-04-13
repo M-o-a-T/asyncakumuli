@@ -5,7 +5,7 @@ import trio_mysql as DB
 import yaml
 import trio_mysql.cursors
 import sys
-import asks
+import httpx
 import json
 import datetime
 from traceback import print_exc
@@ -18,7 +18,8 @@ known = {}
 special = {}
 
 async def main():
-    q = asks.Session(connections=3)
+    limits = httpx.Limits(max_keepalive_connections=1, max_connections=3)
+    q = httpx.AsyncClient(timeout=600, limits=limits)
     cl = trio.CapacityLimiter(5)
     cff = open('cfg.yaml','r+')
     cfg = yaml.safe_load(cff)
