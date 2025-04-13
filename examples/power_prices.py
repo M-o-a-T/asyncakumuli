@@ -8,7 +8,7 @@ electricity into Akumuli.
 
 from datetime import datetime,timedelta,timezone
 from asyncakumuli import connect, Entry, DS, get_max_ts
-import asks
+import httpx
 from pprint import pprint
 import trio
 tz = datetime.now(timezone(timedelta(0))).astimezone().tzinfo
@@ -24,7 +24,8 @@ series="price"
 tags=dict(type="power",source="awattar")
 
 async def main(start):
-	async with asks.sessions.Session() as s, \
+	limits = httpx.Limits(max_keepalive_connections=1, max_connections=3)
+	async with httpx.AsyncClient(timeout=600, limits=limits) as s, \
 			connect("a.rock.s") as ak:
 		q = await get_max_ts(s, series, tags, url = "http://a.rock.s:8181/api/query")
 		if q:

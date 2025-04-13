@@ -55,14 +55,14 @@ RespTags = Mapping[str, str]
 ExtRespType = Union[BaseException, str, int, float, Iterable[RespType]]
 
 
-async def get_max_ts(asks_session, series: str, tags: dict = (), url: str = _url):
+async def get_max_ts(httpx_session, series: str, tags: dict = (), url: str = _url):
     """
     Read the timestamp of the last entry.
     """
     if not tags:
         tags = {}
 
-    r = await asks_session.post(url, data=json.dumps(dict(aggregate={series: "last"}, where=tags)))
+    r = await httpx_session.post(url, data=json.dumps(dict(aggregate={series: "last"}, where=tags)))
     if r.raw:
         br = Resp(BufferedReader(data=r.raw))
         try:
@@ -82,7 +82,7 @@ async def get_max_ts(asks_session, series: str, tags: dict = (), url: str = _url
 
 
 async def get_data(
-    asks_session,
+    httpx_session,
     series: str,
     tags: dict,
     t_start=None,
@@ -117,12 +117,11 @@ async def get_data(
         if isinstance(group, str):
             group = (group,)
         r["group-by-tag"] = group
-    r = await asks_session.post(url, data=json.dumps(r), stream=True)
 
-    if r.status_code != 200:
-        raise RespError(r.reason_phrase, r.raw)
-    else:
-        br = Resp(BufferedReader(r.body))
+    async with httpx_session.stream("POST", url, data=json.dumps(r)) as r:
+        if r.status_code != 200:
+            raise RespError(r.reason_phrase, r.raw)
+        br = Resp(BufferedReader(r.aiter_bytes()))
         while True:
             try:
                 tags = await br.receive()  # ignore value

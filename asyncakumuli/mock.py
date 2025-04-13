@@ -2,7 +2,7 @@ import os
 import tempfile
 from contextlib import asynccontextmanager
 
-import asks
+import httpx
 import trio
 
 from asyncakumuli import connect
@@ -73,7 +73,8 @@ log4j.appender.file.datePattern='.'yyyy-MM-dd
 
     @asynccontextmanager
     async def run(self):
-        async with self._daemon() as server, asks.Session() as session, connect(
+        limits = httpx.Limits(max_keepalive_connections=1, max_connections=3)
+        async with self._daemon() as server, httpx.AsyncClient(timeout=600, limits=limits) as session, connect(
             port=TCP_PORT
         ) as client:
             self._server = server

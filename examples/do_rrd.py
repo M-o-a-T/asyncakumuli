@@ -13,7 +13,7 @@ from asyncakumuli import connect as akumuli, get_min_ts
 from asyncakumuli import DS, Entry, EntryDelta
 from asyncakumuli.collectd import Value
 import math
-import asks
+import httpx
 import shlex
 import datetime
 from copy import deepcopy, copy
@@ -198,7 +198,8 @@ async def read_all():
 
     ## Work starts here
     
-    q = asks.Session(connections=3)
+    limits = httpx.Limits(max_keepalive_connections=1, max_connections=3)
+    q = httpx.AsyncClient(timeout=600, limits=limits)
     cl0 = trio.CapacityLimiter(20)  # RRDs in memory at the same time
     cl1 = trio.CapacityLimiter(3)  # RRS dump jobs
     cl2 = trio.CapacityLimiter(5)  # feed-to-Akumuli jobs
