@@ -3,7 +3,7 @@ import tempfile
 from contextlib import asynccontextmanager
 
 import httpx
-import trio
+import anyio
 
 from asyncakumuli import connect
 from asyncakumuli import get_data as _get_data
@@ -22,7 +22,7 @@ class Tester:
     @staticmethod
     @asynccontextmanager
     async def _daemon(http=HTTP_PORT, tcp=TCP_PORT):
-        async with trio.open_nursery() as n:
+        async with anyio.create_task_group() as n:
             with tempfile.TemporaryDirectory() as d:
                 cfg = os.path.join(d, "test.cfg")
                 with open(cfg, "w", encoding="utf-8") as f:
@@ -49,27 +49,27 @@ log4j.appender.file.datePattern='.'yyyy-MM-dd
                         file=f,
                     )
                 print(d)
-                proc = await trio.run_process(
-                    ["akumulid", "--create", "--allocate", "--config", cfg]
+                proc = await anyio.run_process(
+                    ["akumulid", "--create", "--allocate", "--config", cfg],
+                    check=True,
                 )
-                proc = await n.start(trio.run_process, ["akumulid", "--config", cfg])
-                try:
-                    with trio.fail_after(10):
-                        while True:
-                            try:
-                                s = await trio.open_tcp_stream("127.0.0.1", TCP_PORT)
-                                await s.aclose()
-                                break
-                            except OSError:
-                                await trio.sleep(0.1)
-                    yield proc
-                finally:
-                    proc.terminate()
-                    with trio.move_on_after(2) as cs:
-                        cs.shield = True
-                        await proc.wait()
-                    if proc.poll() is None:
-                        proc.kill()
+                async with await anyio.open_process(["akumulid", "--config", cfg]) as proc:
+                    try:
+                        with anyio.fail_after(10):
+                            while True:
+                                try:
+                                    async with await anyio.connect_tcp("127.0.0.1", TCP_PORT) as s:
+                                        pass
+                                    break
+                                except OSError:
+                                    await anyio.sleep(0.1)
+                        yield proc
+                    finally:
+                        proc.terminate()
+                        with anyio.move_on_after(2, shield=True) as cs:
+                            await proc.wait()
+                        if proc.returncode is None:
+                            proc.kill()
 
     @asynccontextmanager
     async def run(self):
