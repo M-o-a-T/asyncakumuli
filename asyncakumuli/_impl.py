@@ -62,9 +62,9 @@ async def get_max_ts(httpx_session, series: str, tags: dict = (), url: str = _ur
     if not tags:
         tags = {}
 
-    r = await httpx_session.post(url, data=json.dumps(dict(aggregate={series: "last"}, where=tags)))
+    r = await httpx_session.post(url, content=json.dumps(dict(aggregate={series: "last"}, where=tags)))
     if r.raw:
-        br = Resp(BufferedReader(data=r.raw))
+        br = Resp(BufferedReader(content=r.raw))
         try:
             await br.receive()  # ignore value
         except RespError as exc:
@@ -118,7 +118,7 @@ async def get_data(
             group = (group,)
         r["group-by-tag"] = group
 
-    async with httpx_session.stream("POST", url, data=json.dumps(r)) as r:
+    async with httpx_session.stream("POST", url, content=json.dumps(r)) as r:
         if r.status_code != 200:
             raise RespError(r.reason_phrase, r.raw)
         br = Resp(BufferedReader(r.aiter_bytes()))
