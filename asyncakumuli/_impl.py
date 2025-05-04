@@ -63,8 +63,9 @@ async def get_max_ts(httpx_session, series: str, tags: dict = (), url: str = _ur
         tags = {}
 
     r = await httpx_session.post(url, content=json.dumps(dict(aggregate={series: "last"}, where=tags)))
-    if r.raw:
-        br = Resp(BufferedReader(content=r.raw))
+    d = await r.aread()
+    if d:
+        br = Resp(BufferedReader(data=d))
         try:
             await br.receive()  # ignore value
         except RespError as exc:
