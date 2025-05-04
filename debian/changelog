@@ -1,3 +1,9 @@
+asyncakumuli (0.6.3-1) unstable; urgency=medium
+
+  * Merge
+
+ -- Matthias Urlichs <matthias@urlichs.de>  Sun, 04 May 2025 19:42:55 +0200
+
 asyncakumuli (0.6.2-1) unstable; urgency=medium
 
   * Merge
