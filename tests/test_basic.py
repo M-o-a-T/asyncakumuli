@@ -5,11 +5,11 @@ import anyio
 from pytz import UTC
 
 from asyncakumuli import DS, Entry
-from asyncakumuli.mock import Tester
+from asyncakumuli.mock import AkumuliTester
 
 
 async def test_basic():
-    async with Tester().run() as tc:
+    async with AkumuliTester().run() as tc:
         e = Entry(
             series="test-A",
             time=1500000000,

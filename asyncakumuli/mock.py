@@ -14,7 +14,7 @@ HTTP_PORT = (os.getpid() + 24) % 10000 + 40000
 URL = f"http://localhost:{HTTP_PORT}/api/query"
 
 
-class Tester:
+class AkumuliTester:
     _client = None
     _server = None
     _session = None
