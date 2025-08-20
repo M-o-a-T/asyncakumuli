@@ -8,8 +8,8 @@ from asyncakumuli import DS, Entry
 from asyncakumuli.mock import AkumuliTester
 
 
-async def test_basic():
-    async with AkumuliTester().run() as tc:
+async def test_basic(free_tcp_port_factory):
+    async with AkumuliTester(free_tcp_port_factory(),free_tcp_port_factory()).run() as tc:
         e = Entry(
             series="test-A",
             time=1500000000,

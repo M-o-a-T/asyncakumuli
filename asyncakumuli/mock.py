@@ -9,19 +9,26 @@ from asyncakumuli import connect
 from asyncakumuli import get_data as _get_data
 from asyncakumuli import get_max_ts as _get_max_ts
 
-TCP_PORT = (os.getpid() + 23) % 10000 + 40000
-HTTP_PORT = (os.getpid() + 24) % 10000 + 40000
-URL = f"http://localhost:{HTTP_PORT}/api/query"
-
-
 class AkumuliTester:
     _client = None
     _server = None
     _session = None
 
-    @staticmethod
+    def __init__(self,tcp_port=None,http_port=None):
+        if tcp_port is None:
+            tcp_port = (os.getpid() + 23) % 10000 + 40000
+        if http_port is None:
+            http_port = (os.getpid() + 24) % 10000 + 40000
+        self.TCP_PORT=tcp_port
+        self.HTTP_PORT=http_port
+        self.URL = f"http://localhost:{http_port}/api/query"
+
     @asynccontextmanager
-    async def _daemon(http=HTTP_PORT, tcp=TCP_PORT):
+    async def _daemon(self, http=None, tcp=None):
+        if http is None:
+            http = self.HTTP_PORT
+        if tcp is None:
+            tcp = self.TCP_PORT
         async with anyio.create_task_group() as n:
             with tempfile.TemporaryDirectory() as d:
                 cfg = os.path.join(d, "test.cfg")
@@ -58,7 +65,7 @@ log4j.appender.file.datePattern='.'yyyy-MM-dd
                         with anyio.fail_after(10):
                             while True:
                                 try:
-                                    async with await anyio.connect_tcp("127.0.0.1", TCP_PORT) as s:
+                                    async with await anyio.connect_tcp("127.0.0.1", self.TCP_PORT) as s:
                                         pass
                                     break
                                 except OSError:
@@ -75,7 +82,7 @@ log4j.appender.file.datePattern='.'yyyy-MM-dd
     async def run(self):
         limits = httpx.Limits(max_keepalive_connections=1, max_connections=3)
         async with self._daemon() as server, httpx.AsyncClient(timeout=600, limits=limits) as session, connect(
-            port=TCP_PORT
+            port=self.TCP_PORT
         ) as client:
             self._server = server
             self._session = session
@@ -87,11 +94,11 @@ log4j.appender.file.datePattern='.'yyyy-MM-dd
         return self._client
 
     def get_data(self, *a, **k):
-        k.setdefault("url", URL)
+        k.setdefault("url", self.URL)
         return _get_data(self._session, *a, **k)
 
     def get_max_ts(self, *a, **k):
-        k.setdefault("url", URL)
+        k.setdefault("url", self.URL)
         return _get_max_ts(self._session, *a, **k)
 
     def preload(self, *a, **k):
